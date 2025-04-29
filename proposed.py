@@ -13,7 +13,7 @@ num_clients = 10
 num_rounds = 60
 epochs_per_client = 5
 batch_size = 64
-participate_ratio = 1
+participate_ratio = 0.8
 random_seed = 42
 
 # 設置隨機種子以確保可重現性
@@ -92,18 +92,20 @@ def load_model(model_class, path, device):
 def main():
     # 準備數據
     list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions = distribution_shifting_CIFAR10_training(num_rounds=15)
-    print(list_of_data_sizes)
-    print(list_of_data_distributions)
-    print(list_of_dataLoaders)
-    client_loaders, testloader = prepare_data(num_clients, batch_size, alpha=1)
+    testloader = distribution_shifting_CIFAR10_test()
+    # print(list_of_data_sizes)
+    # print(list_of_data_distributions)
+    # for rounds in list_of_dataLoaders:
+    #     for client_idx, dataLoader in enumerate(rounds):
+    #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
 
     # 初始化全局模型
     global_model = CNN().to(device)
 
     # 根據客戶端數據量計算權重
-    client_sizes = [len(loader.dataset) for loader in client_loaders]
-    total_size = sum(client_sizes)
-    client_weights = [size / total_size for size in client_sizes]
+    # client_sizes = [len(loader.dataset) for loader in client_loaders]
+    # total_size = sum(client_sizes)
+    # client_weights = [size / total_size for size in client_sizes]
 
     # 用於記錄每輪的準確率
     accuracies = []
@@ -111,20 +113,29 @@ def main():
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
 
+    participate_client_num = int(num_clients * participate_ratio)
+    client_list = [i for i in range(num_clients)]
+    probabilities = [1.0 / num_clients for _ in range(num_clients)]
+
+    # 紀錄從前一次signal到目前的資料累積
+    data_size_from_last_signal = [0 for _ in range(num_clients)]
+
     # 聯邦學習訓練
     for round in range(num_rounds):
-        if round % 20 == 0:
-            epochs_per_client -= 1
-        m = max(1, int(participate_ratio * num_clients))
-        selected_clients = np.random.choice(range(num_clients), m, replace=False)
+        selected_clients = np.random.choice(client_list, size=participate_client_num, p=probabilities)
 
         client_models = []
         for client_idx in selected_clients:
             local_model = copy.deepcopy(global_model).to(device)
-            local_state_dict = client_update(local_model, client_loaders[client_idx], epochs=epochs_per_client)
+            local_state_dict = client_update(local_model, list_of_dataLoaders[round][client_idx], epochs=epochs_per_client)
             client_models.append(local_state_dict)
+        for client_idx in range(num_clients):
+            # 更新data size
+            data_size_from_last_signal[client_idx] += list_of_data_sizes[round][client_idx]
+        print(data_size_from_last_signal)
+        print([data_size_from_last_signal[i] / np.sum(data_size_from_last_signal) for i in selected_clients])
+        global_model = server_aggregate(global_model, client_models, [data_size_from_last_signal[i] / np.sum(data_size_from_last_signal) for i in selected_clients])
 
-        global_model = server_aggregate(global_model, client_models, [client_weights[i] for i in selected_clients])
 
         accuracy, loss = test_model(global_model, testloader)
         accuracies.append(accuracy)
