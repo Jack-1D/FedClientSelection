@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import os  # 用於檢查文件路徑
 import logging
 from model import CNN
+import torch.nn.functional as F
 from data_preprocess import *
 
 num_clients = 10
-num_rounds = 60
+num_rounds = 5
 epochs_per_client = 5
 batch_size = 64
 participate_ratio = 0.8
@@ -88,6 +89,40 @@ def load_model(model_class, path, device):
         print(f"No model found at {path}")
     return model
 
+def client_count_cs_score(global_model, local_state_dict, dataLoader):
+    """
+    計算客戶端的 CS Score
+    :param global_model: 全局模型
+    :param local_state_dict: 客戶端模型的狀態字典
+    :param dataLoader: 客戶端數據加載器
+    :return: CS Score
+    """
+    local_model = CNN()
+    local_model.load_state_dict(local_state_dict)
+    local_model.to(device)
+
+    global_model.eval()
+    local_model.eval()
+    total_cs = 0.0
+
+    with torch.no_grad():
+        for data, _ in dataLoader:
+            data = data.to(device)
+            global_feature_map = global_model.conv_layers(data)
+            local_feature_map = local_model.conv_layers(data)
+
+            global_feature_map_flat = global_feature_map.view(global_feature_map.size(0), -1)
+            local_feature_map_flat = local_feature_map.view(local_feature_map.size(0), -1)
+
+            # 計算每個 sample 的 cosine similarity -> shape: [B]
+            sim = F.cosine_similarity(global_feature_map_flat, local_feature_map_flat, dim=1)
+            print(sim)
+            total_cs += sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
+            print(total_cs)
+
+    avg_cs_score = total_cs / len(dataLoader.dataset)
+    return avg_cs_score
+
 # 主訓練循環
 def main():
     # 準備數據
@@ -119,22 +154,33 @@ def main():
 
     # 紀錄從前一次signal到目前的資料累積
     data_size_from_last_signal = [0 for _ in range(num_clients)]
+    # 紀錄最後一次signal是第幾輪
+    last_signal = 0
 
     # 聯邦學習訓練
     for round in range(num_rounds):
-        selected_clients = np.random.choice(client_list, size=participate_client_num, p=probabilities)
+        selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
+        print(f"Selected clients for round {round + 1}: {selected_clients}")
 
         client_models = []
+        client_cs_loss = []
         for client_idx in selected_clients:
             local_model = copy.deepcopy(global_model).to(device)
             local_state_dict = client_update(local_model, list_of_dataLoaders[round][client_idx], epochs=epochs_per_client)
             client_models.append(local_state_dict)
+            # 每個被選到的client計算CS Score
+            cs_score = client_count_cs_score(global_model, local_state_dict, list_of_dataLoaders[round][client_idx])
+            client_cs_loss.append(cs_score)
+            print(f"Client {client_idx} CS Loss: {cs_score:.4f}")
         for client_idx in range(num_clients):
             # 更新data size
             data_size_from_last_signal[client_idx] += list_of_data_sizes[round][client_idx]
+            print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[round][client_idx].dataset.indices) - set(list_of_dataLoaders[last_signal][client_idx].dataset.indices))}")
         print(data_size_from_last_signal)
-        print([data_size_from_last_signal[i] / np.sum(data_size_from_last_signal) for i in selected_clients])
-        global_model = server_aggregate(global_model, client_models, [data_size_from_last_signal[i] / np.sum(data_size_from_last_signal) for i in selected_clients])
+        print(np.sum(data_size_from_last_signal))
+        print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) for i in selected_clients])
+
+        global_model = server_aggregate(global_model, client_models, [data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) for i in selected_clients])
 
 
         accuracy, loss = test_model(global_model, testloader)
