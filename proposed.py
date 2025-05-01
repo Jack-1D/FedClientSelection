@@ -123,10 +123,28 @@ def client_count_cs_score(global_model, local_state_dict, dataLoader):
     avg_cs_score = total_cs / len(dataLoader.dataset)
     return avg_cs_score
 
+def normalized_shannon_entropy(class_counts):
+    """
+    計算類別分佈的正規化香農熵
+    :param class_counts: 類別計數的列表或數組
+    :return: 正規化香農熵
+    """
+    class_counts = np.array(class_counts)
+    total = class_counts.sum()
+    if total == 0:
+        return 0.0  # no data
+
+    p = class_counts / total
+    p = p[p > 0]  # 避免 log(0)
+    entropy = -np.sum(p * np.log(p)) / np.log(len(class_counts))
+    return entropy
+
 # 主訓練循環
 def main():
     # 準備數據
-    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions = distribution_shifting_CIFAR10_training(num_rounds=15)
+    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=15)
+    # print(num_class)
+    print(list_of_client_indices_num)
     testloader = distribution_shifting_CIFAR10_test()
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
@@ -154,6 +172,12 @@ def main():
 
     # 紀錄從前一次signal到目前的資料累積
     data_size_from_last_signal = [0 for _ in range(num_clients)]
+    # 紀錄從前一次signal到目前的各class的資料累積
+    label_size_from_last_signal = [[0 for _ in range(num_class)] for _ in range(num_clients)]
+    # 紀錄每個client的local data distribution 的normalized shannon entropy
+    clients_nse = [0 for _ in range(num_clients)]
+    # 紀錄每個client data size的排名
+    data_size_from_last_signal_rank = [0 for _ in range(num_clients)]
     # 紀錄最後一次signal是第幾輪
     last_signal = 0
 
@@ -176,6 +200,18 @@ def main():
             # 更新data size
             data_size_from_last_signal[client_idx] += list_of_data_sizes[round][client_idx]
             print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[round][client_idx].dataset.indices) - set(list_of_dataLoaders[last_signal][client_idx].dataset.indices))}")
+            # 更新每個client新增的各label數量
+            label_size_from_last_signal[client_idx] = [label_size_from_last_signal[client_idx][i] + list_of_client_indices_num[round][client_idx][i] for i in range(num_class)]
+            # 更新nse
+            clients_nse[client_idx] = normalized_shannon_entropy(label_size_from_last_signal[client_idx])
+        # 更新每個client的資料量佔比
+        label_size_from_last_signal_proportions = [np.sum(label_size_from_last_signal[client_idx]) / np.sum([np.sum(label_size_from_last_signal[client_idx]) for client_idx in range(num_clients)]) for client_idx in range(num_clients)]
+        # 更新每個client的資料量排名
+        data_size_from_last_signal_rank = np.array(data_size_from_last_signal).argsort().argsort()
+        print(f"label_size_from_last_signal_proportions: {label_size_from_last_signal_proportions}")
+        print(f"clients_nse: {clients_nse}")
+        print(f"data_size_from_last_signal_rank: {data_size_from_last_signal_rank}")
+        print(f"label_size_from_last_signal:{label_size_from_last_signal}")
         print(data_size_from_last_signal)
         print(np.sum(data_size_from_last_signal))
         print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) for i in selected_clients])

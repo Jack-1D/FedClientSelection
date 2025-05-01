@@ -18,7 +18,7 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     :param strength: 分佈強度
     :param epsilon: 最小值
     :param rescue_ratio: 救援比例
-    :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions
+    :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
     # 加載 CIFAR-10 數據集
     transform = torchvision.transforms.Compose([
@@ -41,6 +41,8 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client的資料分布
     list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 每一輪每個client每個class的資料量
+    list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
     new_proportions = init_proportions.copy()
     cumu = [0 for _ in range(num_clients)]
     all_distributions = [init_proportions]
@@ -53,6 +55,8 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
                     avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*new_proportions[client_idx][class_idx]))
                     selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
                     client_get_indices[round_idx][client_idx].extend(selected_indices)
+                    # 紀錄這一輪這個client在這個class的資料量
+                    list_of_client_indices_num[round_idx][client_idx][class_idx] += avail_data_size
                     # 更新data pool
                     train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
                     # 紀錄這一輪的資料量
@@ -89,7 +93,7 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     print(list_of_data_sizes)
     # print(list_of_data_distributions)
 
-    return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions
+    return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
 
 def distribution_shifting_CIFAR10_test():
     """
