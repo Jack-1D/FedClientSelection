@@ -17,6 +17,13 @@ batch_size = 64
 participate_ratio = 0.8
 random_seed = 42
 
+alpha = 1
+beta = 1
+gamma = 1
+
+temperature = 5
+cs_threshold = 0.9
+
 # 設置隨機種子以確保可重現性
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
@@ -43,12 +50,14 @@ def client_update(model, loader, epochs=1, lr=0.01):
     return model.state_dict()
 
 # 伺服器聚合函數（FedAvg）
-def server_aggregate(global_model, client_models, client_weights):
+def server_aggregate(global_model, client_models, selected_clients, client_weights):
     global_dict = global_model.state_dict()
     for key in global_dict.keys():
         global_dict[key] = torch.zeros_like(global_dict[key])
-        for i, client_dict in enumerate(client_models):
-            global_dict[key] += client_weights[i] * client_dict[key]
+        for client_idx in selected_clients:
+            global_dict[key] += client_weights[client_idx] * client_models[client_idx][key]
+        # for i, client_dict in enumerate(client_models):
+        #     global_dict[key] += client_weights[i] * client_dict[key]
     global_model.load_state_dict(global_dict)
     return global_model
 
@@ -178,34 +187,48 @@ def main():
     clients_nse = [0 for _ in range(num_clients)]
     # 紀錄每個client data size的排名
     data_size_from_last_signal_rank = [0 for _ in range(num_clients)]
+    # 紀錄前一輪每個client data size的排名
+    prev_data_size_from_last_signal_rank = [0 for _ in range(num_clients)]
+    # 紀錄從頭到前一次signal每個class的資料累積
+    label_size_to_last_signal = [[0 for _ in range(num_class)] for _ in range(num_clients)]
+    # 紀錄從頭到目前每個class的資料累積
+    label_size_to_cur = [[0 for _ in range(num_class)] for _ in range(num_clients)]
     # 紀錄最後一次signal是第幾輪
     last_signal = 0
+    signal = False
 
     # 聯邦學習訓練
     for round in range(num_rounds):
+        signal = False
+
         selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
         print(f"Selected clients for round {round + 1}: {selected_clients}")
 
-        client_models = []
-        client_cs_loss = []
+        client_models = [global_model.state_dict() for _ in range(num_clients)]
+        client_cs_score = [1.0 for _ in range(num_clients)]
         for client_idx in selected_clients:
             local_model = copy.deepcopy(global_model).to(device)
             local_state_dict = client_update(local_model, list_of_dataLoaders[round][client_idx], epochs=epochs_per_client)
-            client_models.append(local_state_dict)
+            client_models[client_idx] = local_state_dict
             # 每個被選到的client計算CS Score
             cs_score = client_count_cs_score(global_model, local_state_dict, list_of_dataLoaders[round][client_idx])
-            client_cs_loss.append(cs_score)
-            print(f"Client {client_idx} CS Loss: {cs_score:.4f}")
+            client_cs_score[client_idx] = cs_score
+            print(f"Client {client_idx} CS Score: {cs_score:.4f}")
         for client_idx in range(num_clients):
             # 更新data size
             data_size_from_last_signal[client_idx] += list_of_data_sizes[round][client_idx]
             print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[round][client_idx].dataset.indices) - set(list_of_dataLoaders[last_signal][client_idx].dataset.indices))}")
+            label_size_to_cur[client_idx] = [label_size_to_cur[client_idx][i] + list_of_client_indices_num[round][client_idx][i] for i in range(num_class)]
             # 更新每個client新增的各label數量
             label_size_from_last_signal[client_idx] = [label_size_from_last_signal[client_idx][i] + list_of_client_indices_num[round][client_idx][i] for i in range(num_class)]
+            print(f"label_size_from_last_signal: {label_size_from_last_signal[client_idx]}")
+            print(f"label_size_to_cur: {label_size_to_cur[client_idx]}")
             # 更新nse
-            clients_nse[client_idx] = normalized_shannon_entropy(label_size_from_last_signal[client_idx])
+            clients_nse[client_idx] = normalized_shannon_entropy(label_size_to_cur[client_idx])
         # 更新每個client的資料量佔比
         label_size_from_last_signal_proportions = [np.sum(label_size_from_last_signal[client_idx]) / np.sum([np.sum(label_size_from_last_signal[client_idx]) for client_idx in range(num_clients)]) for client_idx in range(num_clients)]
+        # 儲存前一輪每個client資料量的排名
+        prev_data_size_from_last_signal_rank = data_size_from_last_signal_rank
         # 更新每個client的資料量排名
         data_size_from_last_signal_rank = np.array(data_size_from_last_signal).argsort().argsort()
         print(f"label_size_from_last_signal_proportions: {label_size_from_last_signal_proportions}")
@@ -214,9 +237,14 @@ def main():
         print(f"label_size_from_last_signal:{label_size_from_last_signal}")
         print(data_size_from_last_signal)
         print(np.sum(data_size_from_last_signal))
-        print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) for i in selected_clients])
+        print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients else 0 for i in range(num_clients)])
 
-        global_model = server_aggregate(global_model, client_models, [data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) for i in selected_clients])
+        global_model = server_aggregate(
+            global_model, 
+            client_models, 
+            selected_clients, 
+            [data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients else 0 for i in range(num_clients)]
+        )
 
 
         accuracy, loss = test_model(global_model, testloader)
@@ -226,6 +254,29 @@ def main():
         if round % 10 == 0:
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             save_model(global_model, cur_model_path)
+
+        for client_idx in selected_clients:
+            if(client_cs_score[client_idx] < cs_threshold):
+                signal = True
+
+        if round > last_signal + 1 and not np.array_equal(prev_data_size_from_last_signal_rank, data_size_from_last_signal_rank):
+            signal = True
+
+        # for client_idx in range(num_clients):
+            
+        #     kl = F.kl_div(list_of_dataLoaders[round][client_idx].dataset, Q, reduction='sum')
+
+        if signal:
+            print(client_cs_score)
+            print(label_size_from_last_signal_proportions)
+            print(clients_nse)
+            score = [alpha * client_cs_score[i] + beta * label_size_from_last_signal_proportions[i] + gamma * clients_nse[i] for i in range(num_clients)]
+            # score = alpha * client_cs_score + beta * label_size_from_last_signal_proportions + gamma * clients_nse
+            scaled_score = torch.tensor(score) / temperature
+            probabilities = F.softmax(scaled_score, dim=0).numpy()
+            print(f"Updated probabilities: {probabilities}")
+            last_signal = round
+            label_size_to_last_signal = label_size_to_cur
 
     # 保存最終模型
     final_model_path = "checkpoints/global_model_final.pth"

@@ -71,7 +71,7 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
         new_proportions = np.clip(new_proportions, epsilon, None)
         new_proportions = np.array([np.random.dirichlet(a) for a in new_proportions])
         
-        print("proportions:", new_proportions[0])
+        # print("proportions:", new_proportions[0])
         all_distributions.append(new_proportions)
     history = [d[0] for d in all_distributions]
     history = np.array(history)
@@ -90,7 +90,7 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
             cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
             loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
             list_of_dataLoaders[round_idx][client_idx] = loader
-    print(list_of_data_sizes)
+    # print(list_of_data_sizes)
     # print(list_of_data_distributions)
 
     return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
