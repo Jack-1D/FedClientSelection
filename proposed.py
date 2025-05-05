@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from data_preprocess import *
 
 num_clients = 10
-num_rounds = 5
+num_rounds = 800
 epochs_per_client = 5
 batch_size = 64
 participate_ratio = 0.8
@@ -21,7 +21,7 @@ alpha = 1
 beta = 1
 gamma = 1
 
-temperature = 5
+temperature = 0.8
 cs_threshold = 0.9
 kl_threshold = 0.001
 
@@ -163,7 +163,7 @@ def normalized_shannon_entropy(class_counts):
 # 主訓練循環
 def main():
     # 準備數據
-    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=15)
+    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
     # print(num_class)
     print(list_of_client_indices_num)
     testloader = distribution_shifting_CIFAR10_test()
@@ -175,11 +175,6 @@ def main():
 
     # 初始化全局模型
     global_model = copy.deepcopy(model_type).to(device)
-
-    # 根據客戶端數據量計算權重
-    # client_sizes = [len(loader.dataset) for loader in client_loaders]
-    # total_size = sum(client_sizes)
-    # client_weights = [size / total_size for size in client_sizes]
 
     # 用於記錄每輪的準確率
     accuracies = []
@@ -242,7 +237,8 @@ def main():
             # 更新nse
             clients_nse[client_idx] = normalized_shannon_entropy(label_size_to_cur[client_idx])
         # 更新每個client的資料量佔比
-        label_size_from_last_signal_proportions = [np.sum(label_size_from_last_signal[client_idx]) / np.sum([np.sum(label_size_from_last_signal[client_idx]) for client_idx in range(num_clients)]) for client_idx in range(num_clients)]
+        total_label_size_from_last_signal_proportions = np.sum([np.sum(label_size_from_last_signal[client_idx]) for client_idx in range(num_clients)])
+        label_size_from_last_signal_proportions = [np.sum(label_size_from_last_signal[client_idx]) / total_label_size_from_last_signal_proportions if total_label_size_from_last_signal_proportions != 0 else 0 for client_idx in range(num_clients)]
         # 儲存前一輪每個client資料量的排名
         prev_data_size_from_last_signal_rank = copy.deepcopy(data_size_from_last_signal_rank)
         # 更新每個client的資料量排名
@@ -253,13 +249,13 @@ def main():
         print(f"label_size_from_last_signal:{label_size_from_last_signal}")
         print(data_size_from_last_signal)
         print([np.sum(label_size_from_last_signal[i]) for i in range(num_clients)])
-        print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients else 0 for i in range(num_clients)])
+        print([data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients and np.sum([data_size_from_last_signal[j] for j in selected_clients]) != 0 else 0 for i in range(num_clients)])
 
         global_model = server_aggregate(
             global_model, 
             client_models_state_dict, 
             selected_clients, 
-            [data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients else 0 for i in range(num_clients)]
+            [data_size_from_last_signal[i] / np.sum([data_size_from_last_signal[j] for j in selected_clients]) if i in selected_clients and np.sum([data_size_from_last_signal[j] for j in selected_clients]) != 0 else 0 for i in range(num_clients)]
         )
 
 
@@ -286,8 +282,14 @@ def main():
             if np.sum(label_size_to_cur[client_idx]) == 0 or np.sum(label_size_to_last_signal[client_idx]) == 0:
                 kl = normalized_shannon_entropy(label_size_to_cur[client_idx])
             else:
-                P = torch.tensor([label_size_to_cur[client_idx][i] / np.sum(label_size_to_cur[client_idx]) for i in range(num_class)]) + epsilon
-                Q = torch.tensor([label_size_to_last_signal[client_idx][i] / np.sum(label_size_to_last_signal[client_idx]) for i in range(num_class)]) + epsilon
+                P = torch.tensor([
+                    label_size_to_cur[client_idx][i] / np.sum(label_size_to_cur[client_idx]) if np.sum(label_size_to_cur[client_idx]) != 0 else 0 
+                    for i in range(num_class)
+                ]) + epsilon
+                Q = torch.tensor([
+                    label_size_to_last_signal[client_idx][i] / np.sum(label_size_to_last_signal[client_idx]) if np.sum(label_size_to_last_signal[client_idx]) != 0 else 0 
+                    for i in range(num_class)
+                ]) + epsilon
                 kl = F.kl_div(P.log(), Q, reduction='batchmean')
                 print(f"P: {P}")
                 print(f"Q: {Q}")
