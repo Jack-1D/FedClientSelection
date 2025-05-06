@@ -1,5 +1,9 @@
 import torch
 import torch.nn.functional as F
+import numpy as np
+import copy
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 計算KL散度
 def compute_kl_divergence(model1, model2, data_loader, device):
@@ -23,3 +27,54 @@ def compute_kl_divergence(model1, model2, data_loader, device):
             total_samples += batch_size
     
     return kl_div / total_samples if total_samples > 0 else float('inf')
+
+def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader):
+    """
+    計算客戶端的 CS Score
+    :param model_type: 客戶端模型類型
+    :param global_model: 全局模型
+    :param local_state_dict: 客戶端模型的狀態字典
+    :param dataLoader: 客戶端數據加載器
+    :return: CS Score
+    """
+    local_model = copy.deepcopy(model_type)
+    local_model.load_state_dict(local_state_dict)
+    local_model.to(device)
+
+    global_model.eval()
+    local_model.eval()
+    total_cs = 0.0
+
+    with torch.no_grad():
+        for data, _ in dataLoader:
+            data = data.to(device)
+            global_feature_map = global_model.conv_layers(data)
+            local_feature_map = local_model.conv_layers(data)
+
+            global_feature_map_flat = global_feature_map.view(global_feature_map.size(0), -1)
+            local_feature_map_flat = local_feature_map.view(local_feature_map.size(0), -1)
+
+            # 計算每個 sample 的 cosine similarity -> shape: [B]
+            sim = F.cosine_similarity(global_feature_map_flat, local_feature_map_flat, dim=1)
+            print(sim)
+            total_cs += sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
+            print(total_cs)
+
+    avg_cs_score = total_cs / len(dataLoader.dataset)
+    return avg_cs_score
+
+def normalized_shannon_entropy(class_counts):
+    """
+    計算類別分佈的正規化香農熵
+    :param class_counts: 類別計數的列表或數組
+    :return: 正規化香農熵
+    """
+    class_counts = np.array(class_counts)
+    total = class_counts.sum()
+    if total == 0:
+        return 0.0  # no data
+
+    p = class_counts / total
+    p = p[p > 0]  # 避免 log(0)
+    entropy = -np.sum(p * np.log(p)) / np.log(len(class_counts))
+    return entropy
