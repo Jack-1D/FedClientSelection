@@ -9,7 +9,7 @@ from server import FLServer
 from client import FLClient
 
 num_clients = 10
-num_rounds = 800
+num_rounds = 300
 epochs_per_client = 5
 batch_size = 64
 participate_ratio = 0.8
@@ -20,8 +20,8 @@ beta = 1
 gamma = 1
 
 temperature = 0.8
-cs_threshold = 0.9
-kl_threshold = 0.001
+cs_threshold = 0.5
+kl_threshold = 0.01
 kl_epsilon = 1e-10
 
 # 設置隨機種子以確保可重現性
@@ -41,7 +41,7 @@ generator.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Log.log', filemode='a')
+logging.basicConfig(level=logging.INFO, filename='Logtest.log', filemode='a')
 
 model_type = CNN().apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None)
 
@@ -66,7 +66,7 @@ def main():
 
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
-    accuracy_log_path = "accuracy_log.txt"
+    accuracy_log_path = "accuracy_log_test.txt"
 
     participate_client_num = int(num_clients * participate_ratio)
     client_list = [i for i in range(num_clients)]
@@ -84,10 +84,10 @@ def main():
         Server.send_model(Clients, selected_clients)
         # 每個client進行local training
         for client_idx in selected_clients:
-            Clients[selected_clients].client_update(round, epochs=epochs_per_client)
+            Clients[client_idx].client_update(round, epochs=epochs_per_client)
             # 每個被選到的client計算CS Score
-            Clients[selected_clients].compute_cs_score(round)
-        print(f"CS Score: {[Clients[i].cs for i in range(num_clients)]:.4f}")
+            Clients[client_idx].compute_cs_score(round)
+        print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(num_clients)]}")
         for client_idx in range(num_clients):
             # 更新data size
             Clients[client_idx].data_size_from_last_signal += list_of_data_sizes[round][client_idx]
@@ -105,12 +105,12 @@ def main():
         Server.send_all_data_size_from_last_signal(Clients)
         for client_idx in range(num_clients):
             Clients[client_idx].compute_label_size_from_last_signal_rank()
-        print(f"label_size_from_last_signal_proportions: {Clients[0].label_size_from_last_signal_proportions}")
+        print(f"label_size_from_last_signal_proportions: {[Clients[i].data_size_from_last_signal_proportions for i in range(num_clients)]}")
         print(f"clients_nse: {[Clients[i].nse for i in range(num_clients)]}")
         print(f"data_size_from_last_signal_rank: {Clients[0].data_size_from_last_signal_rank}")
-        print(f"label_size_from_last_signal:{Clients[0].all_label_size_from_last_signal}")
+        print(f"label_size_from_last_signal:{Clients[0].all_data_size_from_last_signal}")
         print([Clients[i].data_size_from_last_signal for i in range(num_clients)])
-        print([np.sum(Clients[0].all_label_size_from_last_signal[i]) for i in range(num_clients)])
+        print([np.sum(Clients[0].all_data_size_from_last_signal[i]) for i in range(num_clients)])
         print([Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(num_clients)])
 
         Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(num_clients)])
@@ -142,11 +142,11 @@ def main():
     # 繪製Round vs Accuracy圖表
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, num_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
-    plt.title('Test Accuracy vs. Communication Round (Dirichlet α=0.1)')
+    plt.title('Test Accuracy vs. Communication Round test (Dirichlet α=0.1)')
     plt.xlabel('Round')
     plt.ylabel('Test Accuracy (%)')
     plt.grid(True)
-    plt.savefig('accuracy_vs_round_dirichlet.png')
+    plt.savefig('accuracy_vs_round_dirichlet_test.png')
     plt.show()
 
     # 示例：加載最終模型並測試

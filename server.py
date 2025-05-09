@@ -1,5 +1,4 @@
 import torch
-import copy
 import torch.nn as nn
 import os
 from torch.nn import functional as F
@@ -12,13 +11,16 @@ class FLServer:
         self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
         self.all_data_size_from_last_signal = [[0 for _ in range(num_class)] for _ in range(num_clients)]
         self.signal_list = [False for _ in range(num_clients)]
+        self.clients_cs_score = [0.0 for _ in range(num_clients)]
+        self.clients_label_size_from_last_signal_proportions = [0.0 for _ in range(num_clients)]
+        self.clients_nse = [0.0 for _ in range(num_clients)]
 
     def server_aggregate(self, Clients, selected_clients, client_weights):
         self.global_dict = self.model.state_dict()
         for key in self.global_dict.keys():
             self.global_dict[key] = torch.zeros_like(self.global_dict[key])
             for client_idx in selected_clients:
-                self.global_dict[key] += client_weights[client_idx] * Clients[client_idx].state_dict()[key]
+                self.global_dict[key] += client_weights[client_idx] * Clients[client_idx].model.state_dict()[key]
         self.model.load_state_dict(self.global_dict)
 
     def send_model(self, Clients, selected_clients):
@@ -45,10 +47,10 @@ class FLServer:
         avg_loss = loss / len(testloader)
         return accuracy, avg_loss
     
-    def receive_label_size_from_last_signal(self, data_size_from_last_signal, client_idx):
+    def receive_data_size_from_last_signal(self, data_size_from_last_signal, client_idx):
         self.all_data_size_from_last_signal[client_idx] = data_size_from_last_signal
 
-    def send_all_label_size_from_last_signal(self, Clients):
+    def send_all_data_size_from_last_signal(self, Clients):
         for client_idx in range(len(Clients)):
             Clients[client_idx].receive_all_data_size_from_last_signal(self.all_data_size_from_last_signal)
 
@@ -60,7 +62,7 @@ class FLServer:
         print(self.clients_cs_score)
         print(self.clients_label_size_from_last_signal_proportions)
         print(self.clients_nse)
-        score = [alpha * self.client_cs_score[i] + beta * self.clients_label_size_from_last_signal_proportions[i] + gamma * self.clients_nse[i] for i in range(self.num_clients)]
+        score = [alpha * self.clients_cs_score[i] + beta * self.clients_label_size_from_last_signal_proportions[i] + gamma * self.clients_nse[i] for i in range(self.num_clients)]
         scaled_score = torch.tensor(score) / temperature
         probabilities = F.softmax(scaled_score, dim=0).numpy()
         return probabilities

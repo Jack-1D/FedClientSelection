@@ -47,11 +47,12 @@ class FLClient:
                 optimizer.step()
 
     def receive_model(self, global_model_state_dict):
-        self.model.load_state_dict(global_model_state_dict)
         self.global_model_replica.load_state_dict(global_model_state_dict)
+        self.model = copy.deepcopy(self.global_model_replica)
+        # self.model.load_state_dict(global_model_state_dict)
 
     def compute_cs_score(self, round):
-        self.cs = client_count_cs_score(self.model_type, self.global_model_replica, self.model.state_dict(), self.data_loader[round])
+        self._cs = client_count_cs_score(self.model_type, self.global_model_replica, self.model.state_dict(), self.data_loader[round])
 
     def compute_nse(self):
         self.nse = normalized_shannon_entropy(self.label_size_to_cur)
@@ -59,7 +60,7 @@ class FLClient:
     def send_data_size_from_last_signal(self, Server, client_idx):
         Server.receive_data_size_from_last_signal(self.data_size_from_last_signal, client_idx)
 
-    def receive_all_label_size_from_last_signal(self, all_data_size_from_last_signal):
+    def receive_all_data_size_from_last_signal(self, all_data_size_from_last_signal):
         self.all_data_size_from_last_signal = all_data_size_from_last_signal
 
     def compute_label_size_from_last_signal_rank(self):
@@ -82,7 +83,7 @@ class FLClient:
     def check_local_iid_signal(self, client_idx, kl_threshold, kl_epsilon):
         # 若還沒signal過，就先用local iid程度來替代
         if np.sum(self.label_size_to_cur) == 0 or np.sum(self.label_size_to_last_signal) == 0:
-            kl = normalized_shannon_entropy(self.label_size_to_cur)
+            self.kl = normalized_shannon_entropy(self.label_size_to_cur)
         else:
             P = torch.tensor([
                 self.label_size_to_cur[i] / np.sum(self.label_size_to_cur) if np.sum(self.label_size_to_cur) != 0 else 0 
@@ -92,22 +93,25 @@ class FLClient:
                 self.label_size_to_last_signal[i] / np.sum(self.label_size_to_last_signal) if np.sum(self.label_size_to_last_signal) != 0 else 0 
                 for i in range(self.num_class)
             ]) + kl_epsilon
-            kl = F.kl_div(P.log(), Q, reduction='batchmean')
+            self.kl = F.kl_div(P.log(), Q, reduction='batchmean')
             print(f"P: {P}")
             print(f"Q: {Q}")
-        print(f"Client {client_idx} KL Divergence: {kl.item():.4f}")
-        if kl > kl_threshold:
+        print(f"Client {client_idx} KL Divergence: {self.kl.item():.4f}")
+        if self.kl.item() > kl_threshold:
             return True
         return False
         
 
     def check_signal(self, client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
         if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+            print(f"Client {client_idx}", f"signal: cs={self._cs:.4f}" if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) else "", 
+                  f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
+                  f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else "")
             return True
         return False
 
     def response_server_request(self):
-        return self._cs, self.label_size_from_last_signal_proportions, self.nse
+        return self._cs, self.data_size_from_last_signal_proportions, self.nse
     
     def do_snapshot(self):
         self.label_size_from_last_signal = [0 for _ in range(self.num_class)]
