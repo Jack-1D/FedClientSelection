@@ -50,7 +50,7 @@ def main():
     list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
     # print(num_class)
     print(list_of_client_indices_num)
-    testloader = distribution_shifting_CIFAR10_test()
+    testloader = CIFAR10_test()
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
     # for rounds in list_of_dataLoaders:

@@ -1,10 +1,9 @@
-# import torch
 import torchvision
 import numpy as np
 from torch.utils.data import Subset
-import matplotlib.pyplot as plt
 from collections import defaultdict
 from torch.utils.data import DataLoader
+from drawer import *
 
 np.random.seed(42)
 
@@ -73,16 +72,12 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
         
         # print("proportions:", new_proportions[0])
         all_distributions.append(new_proportions)
-    history = [d[0] for d in all_distributions]
-    history = np.array(history)
-    for i in range(history.shape[1]):
-        plt.plot(history[:, i], label=f'class {i}')
-    plt.legend()
-    plt.title('Class Probability Over Time (with rescue)')
-    plt.xlabel('Iteration')
-    plt.ylabel('Probability')
-    plt.show()
-    plt.savefig('distribution_drift.png')
+    # Plot each client's data size per class for each round, separated by client
+    draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
+    # 顯示每一輪資料量消耗的圖
+    draw_data_consumption(num_rounds, list_of_data_sizes)
+    # 顯示每個label的資料消耗圖
+    draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset)
     # 每個client累積拿到的indices
     cumu = [[] for _ in range(num_clients)]
     for round_idx in range(num_rounds):
@@ -95,7 +90,73 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
 
     return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
 
-def distribution_shifting_CIFAR10_test():
+def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64, start_class_num: int = 5, increment_period: int = 20):
+    """
+    使用 CIFAR-10 數據集進行類別增量學習
+    :param num_clients: 客戶端數量
+    :param num_rounds: 輪數
+    :param batch_size: 批次大小
+    :return: dataLoader
+    """
+    # 加載 CIFAR-10 數據集
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    train_pool = defaultdict(list)
+    for idx, (image, label) in enumerate(trainset):
+        train_pool[label].append(idx)
+    # 初始資料量
+    sample_of_each_clients = [np.random.randint(1, 50) for _ in range(num_clients)]
+    # 初始資料分布
+    proportions = np.random.dirichlet([alpha] * num_clients, len(trainset.classes))
+    # 每一輪每個client拿到的資料
+    client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 每一輪每個client的dataLoader
+    list_of_dataLoaders = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 每一輪每個client的資料量
+    list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 每一輪每個client每個class的資料量
+    list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
+    cumu = [0 for _ in range(num_clients)]
+    cur_class_num = start_class_num
+    for round_idx in range(num_rounds):
+        if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
+            cur_class_num += 1
+        for client_idx in range(num_clients):
+            for class_idx in range(cur_class_num):
+                # 隨機選擇資料
+                if len(train_pool[class_idx]) > 0:
+                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*proportions[client_idx][class_idx]))
+                    selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
+                    client_get_indices[round_idx][client_idx].extend(selected_indices)
+                    # 紀錄這一輪這個client在這個class的資料量
+                    list_of_client_indices_num[round_idx][client_idx][class_idx] += avail_data_size
+                    # 更新data pool
+                    train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
+                    # 紀錄這一輪的資料量
+                    list_of_data_sizes[round_idx][client_idx] += avail_data_size
+        # 資料量更新
+        sample_of_each_clients = [np.clip(samples + np.random.randint(-10, 10), 1, 150) for samples in sample_of_each_clients]
+    # Plot each client's data size per class for each round, separated by client
+    draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
+    # 顯示每一輪資料量消耗的圖
+    draw_data_consumption(num_rounds, list_of_data_sizes)
+    # 顯示每個label的資料消耗圖
+    draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset)
+    # 每個client累積拿到的indices
+    cumu = [[] for _ in range(num_clients)]
+    for round_idx in range(num_rounds):
+        for client_idx in range(num_clients):
+            cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
+            loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
+            list_of_dataLoaders[round_idx][client_idx] = loader
+    # print(list_of_data_sizes)
+
+    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num
+
+def CIFAR10_test():
     """
     測試分佈漂移
     :return: dataLoader
@@ -109,6 +170,7 @@ def distribution_shifting_CIFAR10_test():
     return DataLoader(testset, batch_size=testset.data.shape[0], shuffle=False)
 
 if __name__ == "__main__":
-    distribution_shifting_CIFAR10_training(num_rounds=15)
-    distribution_shifting_CIFAR10_test()
+    # distribution_shifting_CIFAR10_training(num_rounds=400)
+    # CIFAR10_test()
+    class_incremental_CIFAR10_training()
 
