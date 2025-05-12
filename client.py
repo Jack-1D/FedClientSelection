@@ -7,9 +7,9 @@ from torch.nn import functional as F
 from loss import client_count_cs_score, normalized_shannon_entropy
 
 class FLClient:
-    def __init__(self, model_type, data_loader, num_class, num_clients):
+    def __init__(self, model_type, data_loader, total_class, num_clients):
         self.model_type = model_type
-        self.num_class = num_class
+        self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
@@ -19,14 +19,14 @@ class FLClient:
         # 紀錄從前一次signal到目前的資料累積
         self.data_size_from_last_signal = 0
         # 紀錄從頭到目前每個class的資料累積
-        self.label_size_to_cur = [0 for _ in range(num_class)]
+        self.label_size_to_cur = [0 for _ in range(total_class)]
         # 紀錄從前一次signal到目前的各class的資料累積
-        self.label_size_from_last_signal = [0 for _ in range(num_class)]
+        self.label_size_from_last_signal = [0 for _ in range(total_class)]
         self.all_data_size_from_last_signal = [0 for _ in range(num_clients)]
         self.data_size_from_last_signal_rank = [0 for _ in range(num_clients)]
         self.prev_data_size_from_last_signal_rank = [0 for _ in range(num_clients)]
         # 紀錄從頭到前一次signal每個class的資料累積
-        self.label_size_to_last_signal = [0 for _ in range(num_class)]
+        self.label_size_to_last_signal = [0 for _ in range(total_class)]
         self._cs = 0.0
 
     @property
@@ -87,11 +87,11 @@ class FLClient:
         else:
             P = torch.tensor([
                 self.label_size_to_cur[i] / np.sum(self.label_size_to_cur) if np.sum(self.label_size_to_cur) != 0 else 0 
-                for i in range(self.num_class)
+                for i in range(self.total_class)
             ]) + kl_epsilon
             Q = torch.tensor([
                 self.label_size_to_last_signal[i] / np.sum(self.label_size_to_last_signal) if np.sum(self.label_size_to_last_signal) != 0 else 0 
-                for i in range(self.num_class)
+                for i in range(self.total_class)
             ]) + kl_epsilon
             self.kl = F.kl_div(P.log(), Q, reduction='batchmean')
             print(f"P: {P}")
@@ -102,9 +102,11 @@ class FLClient:
         return False
         
 
-    def check_signal(self, client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
-        if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
-            print(f"Client {client_idx}, signal:", f"cs={self._cs:.4f}" if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) else "", 
+    def check_signal(self, client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
+        if (round+1) in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+            print(f"Client {client_idx}, signal:", 
+                  f"new_class_incoming" if (round+1) in round_idx_increment else "",
+                  f"cs={self._cs:.4f}" if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
                   f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else "")
             return True
@@ -114,6 +116,6 @@ class FLClient:
         return self._cs, self.data_size_from_last_signal_proportions, self.nse
     
     def do_snapshot(self):
-        self.label_size_from_last_signal = [0 for _ in range(self.num_class)]
+        self.label_size_from_last_signal = [0 for _ in range(self.total_class)]
         self.label_size_to_last_signal = copy.deepcopy(self.label_size_to_cur)
         self.data_size_from_last_signal = 0

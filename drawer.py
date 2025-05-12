@@ -26,7 +26,6 @@ def draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_clie
         plt.grid()
         os.makedirs('experiments_plot/distribution', exist_ok=True)
         plt.savefig(f'experiments_plot/distribution/client_{client_idx}_class_data_size_distribution_across_rounds.png')
-        plt.show()
 
 def draw_data_consumption(num_rounds, list_of_data_sizes):
     """
@@ -43,7 +42,6 @@ def draw_data_consumption(num_rounds, list_of_data_sizes):
     plt.grid()
     os.makedirs('experiments_plot', exist_ok=True)
     plt.savefig('experiments_plot/data_consumption.png')
-    plt.show()
 
 def draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset):
     """
@@ -68,4 +66,3 @@ def draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, 
     plt.grid()
     os.makedirs('experiments_plot', exist_ok=True)
     plt.savefig('experiments_plot/label_consumption.png')
-    plt.show()

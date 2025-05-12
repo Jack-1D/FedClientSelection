@@ -4,12 +4,12 @@ import os
 from torch.nn import functional as F
 
 class FLServer:
-    def __init__(self, model_type, num_class, num_clients):
-        self.num_class = num_class
+    def __init__(self, model_type, total_class, num_clients):
+        self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
-        self.all_data_size_from_last_signal = [[0 for _ in range(num_class)] for _ in range(num_clients)]
+        self.all_data_size_from_last_signal = [[0 for _ in range(total_class)] for _ in range(num_clients)]
         self.signal_list = [False for _ in range(num_clients)]
         self.clients_cs_score = [0.0 for _ in range(num_clients)]
         self.clients_label_size_from_last_signal_proportions = [0.0 for _ in range(num_clients)]

@@ -9,11 +9,13 @@ from server import FLServer
 from client import FLClient
 
 num_clients = 10
-num_rounds = 300
+num_rounds = 500
 epochs_per_client = 5
 batch_size = 64
 participate_ratio = 0.8
 random_seed = 42
+increment_period = 20
+dirichlet_alpha = 1
 
 alpha = 1
 beta = 1
@@ -41,14 +43,16 @@ generator.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Logtest.log', filemode='a')
+logging.basicConfig(level=logging.INFO, filename='Logincr.log', filemode='a')
 
 model_type = CNN().apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None)
 
 def main():
     # 準備數據
-    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
-    # print(num_class)
+    # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
+    list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha)
+    # print(total_class)
+    print(round_idx_increment)
     print(list_of_client_indices_num)
     testloader = CIFAR10_test()
     # print(list_of_data_sizes)
@@ -57,16 +61,16 @@ def main():
     #     for client_idx, dataLoader in enumerate(rounds):
     #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
 
-    Server = FLServer(copy.deepcopy(model_type).to(device), num_class, num_clients)
+    Server = FLServer(copy.deepcopy(model_type).to(device), total_class, num_clients)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
-    Clients = [FLClient(copy.deepcopy(model_type).to(device), list_of_dataLoaders[i], num_class, num_clients) for i in range(num_clients)]
+    Clients = [FLClient(copy.deepcopy(model_type).to(device), list_of_dataLoaders[i], total_class, num_clients) for i in range(num_clients)]
 
     # 用於記錄每輪的準確率
     accuracies = []
 
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
-    accuracy_log_path = "accuracy_log_test.txt"
+    accuracy_log_path = "accuracy_log_class_increment.txt"
 
     participate_client_num = int(num_clients * participate_ratio)
     client_list = [i for i in range(num_clients)]
@@ -92,9 +96,9 @@ def main():
             # 更新data size
             Clients[client_idx].data_size_from_last_signal += list_of_data_sizes[round][client_idx]
             print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[client_idx][round].dataset.indices) - set(list_of_dataLoaders[client_idx][last_signal].dataset.indices))}")
-            Clients[client_idx].label_size_to_cur = [Clients[client_idx].label_size_to_cur[i] + list_of_client_indices_num[round][client_idx][i] for i in range(num_class)]
+            Clients[client_idx].label_size_to_cur = [Clients[client_idx].label_size_to_cur[i] + list_of_client_indices_num[round][client_idx][i] for i in range(total_class)]
             # 更新每個client新增的各label數量
-            Clients[client_idx].label_size_from_last_signal = [Clients[client_idx].label_size_from_last_signal[i] + list_of_client_indices_num[round][client_idx][i] for i in range(num_class)]
+            Clients[client_idx].label_size_from_last_signal = [Clients[client_idx].label_size_from_last_signal[i] + list_of_client_indices_num[round][client_idx][i] for i in range(total_class)]
             print(f"label_size_from_last_signal: {Clients[client_idx].label_size_from_last_signal}")
             print(f"label_size_to_cur: {Clients[client_idx].label_size_to_cur}")
             # 更新nse
@@ -126,7 +130,7 @@ def main():
             Server.save_model(cur_model_path)
 
         for client_idx in range(num_clients):
-            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
 
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
@@ -142,11 +146,11 @@ def main():
     # 繪製Round vs Accuracy圖表
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, num_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
-    plt.title('Test Accuracy vs. Communication Round test (Dirichlet α=0.1)')
+    plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α={dirichlet_alpha})')
     plt.xlabel('Round')
     plt.ylabel('Test Accuracy (%)')
     plt.grid(True)
-    plt.savefig('accuracy_vs_round_dirichlet_test.png')
+    plt.savefig('accuracy_vs_round_dirichlet_class_increment.png')
     plt.show()
 
     # 示例：加載最終模型並測試

@@ -120,10 +120,13 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
     # 每一輪每個client每個class的資料量
     list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
     cumu = [0 for _ in range(num_clients)]
+    # 紀錄新class進入的round index
+    round_idx_increment = []
     cur_class_num = start_class_num
     for round_idx in range(num_rounds):
         if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
             cur_class_num += 1
+            round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
             for class_idx in range(cur_class_num):
                 # 隨機選擇資料
@@ -154,7 +157,7 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
             list_of_dataLoaders[round_idx][client_idx] = loader
     # print(list_of_data_sizes)
 
-    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num
+    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num, round_idx_increment
 
 def CIFAR10_test():
     """
