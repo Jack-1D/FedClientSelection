@@ -1,3 +1,5 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,7 +14,16 @@ class FLClient:
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
+        # self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
+        self.model = model_type
+        for m in model_type.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
+                m.weight.data = m.weight.data.float()
+                if m.bias is not None:
+                    m.bias.data = m.bias.data.float()
         self.global_model_replica = self.model
         # dataLoader of each round
         self.data_loader = data_loader
@@ -34,17 +45,32 @@ class FLClient:
         return self._cs
 
     def client_update(self, round, epochs=1, lr=0.01):
+        self.model = self.model.to(self.device)
         self.model.train()
         optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
         criterion = nn.CrossEntropyLoss()
+        scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
         for epoch in range(epochs):
             for data, target in self.data_loader[round]:
-                data, target = data.to(self.device), target.to(self.device)
+                data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
                 optimizer.zero_grad()
-                output = self.model(data)
-                loss = criterion(output, target)
-                loss.backward()
-                optimizer.step()
+                if scaler:
+                    with torch.amp.autocast("cuda"):
+                        output = self.model(data)
+                        loss = criterion(output, target)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    output = self.model(data)
+                    loss = criterion(output, target)
+                    loss.backward()
+                    optimizer.step()
+
+                del data, target, output, loss
+                torch.cuda.empty_cache()
+        self.model = self.model.to("cpu")
+        torch.cuda.empty_cache()
 
     def receive_model(self, global_model_state_dict):
         self.global_model_replica.load_state_dict(global_model_state_dict)
@@ -102,13 +128,15 @@ class FLClient:
         return False
         
 
-    def check_signal(self, client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
-        if (round+1) in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+    def check_signal(self, client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
+        # if (round+1) in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+        if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
             print(f"Client {client_idx}, signal:", 
-                  f"new_class_incoming" if (round+1) in round_idx_increment else "",
+                #   f"new_class_incoming" if (round+1) in round_idx_increment else "",
                   f"cs={self._cs:.4f}" if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
-                  f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else "")
+                  f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else ""
+                )
             return True
         return False
 

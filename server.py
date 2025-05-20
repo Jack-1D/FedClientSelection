@@ -8,7 +8,16 @@ class FLServer:
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
+        # self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
+        self.model = model_type
+        for m in model_type.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
+                m.weight.data = m.weight.data.float()
+                if m.bias is not None:
+                    m.bias.data = m.bias.data.float()
         self.all_data_size_from_last_signal = [[0 for _ in range(total_class)] for _ in range(num_clients)]
         self.signal_list = [False for _ in range(num_clients)]
         self.clients_cs_score = [0.0 for _ in range(num_clients)]
@@ -18,9 +27,9 @@ class FLServer:
     def server_aggregate(self, Clients, selected_clients, client_weights):
         self.global_dict = self.model.state_dict()
         for key in self.global_dict.keys():
-            self.global_dict[key] = torch.zeros_like(self.global_dict[key])
+            self.global_dict[key] = torch.zeros_like(self.global_dict[key], dtype=torch.float32)
             for client_idx in selected_clients:
-                self.global_dict[key] += client_weights[client_idx] * Clients[client_idx].model.state_dict()[key]
+                self.global_dict[key] += client_weights[client_idx] * Clients[client_idx].model.state_dict()[key].float()
         self.model.load_state_dict(self.global_dict)
 
     def send_model(self, Clients, selected_clients):
@@ -28,6 +37,7 @@ class FLServer:
             Clients[client_idx].receive_model(self.model.state_dict())
 
     def test_model(self, testloader):
+        self.model = self.model.to(self.device)
         self.model.eval()
         correct = 0
         total = 0
@@ -45,6 +55,8 @@ class FLServer:
 
         accuracy = 100 * correct / total
         avg_loss = loss / len(testloader)
+        self.model = self.model.to("cpu")
+        torch.cuda.empty_cache()
         return accuracy, avg_loss
     
     def receive_data_size_from_last_signal(self, data_size_from_last_signal, client_idx):
@@ -75,10 +87,9 @@ class FLServer:
         torch.save(self.model.state_dict(), path)
         print(f"Model saved to {path}")
 
-    def load_model(self, model_class, path, device):
-        self.model = model_class().to(device)
+    def load_model(self, path):
         if os.path.exists(path):
-            self.model.load_state_dict(torch.load(path, map_location=device))
+            self.model.load_state_dict(torch.load(path, map_location="cpu"))
             self.model.eval()
             print(f"Model loaded from {path}")
         else:

@@ -262,6 +262,19 @@ def distribution_shifting_CIFAR100_training(alpha: float = 1, num_clients: int =
 
     return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
 
+def CIFAR100_test():
+    """
+    測試分佈漂移
+    :return: dataLoader
+    """
+    # 加載 CIFAR-10 數據集
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
+    testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+    return DataLoader(testset, batch_size=testset.data.shape[0], shuffle=False)
+
 if __name__ == "__main__":
     # distribution_shifting_CIFAR10_training(num_rounds=400)
     # CIFAR10_test()

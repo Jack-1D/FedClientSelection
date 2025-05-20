@@ -1,15 +1,16 @@
-import torch
-from data_preprocess import *
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+from data_preprocess import *
+import torch
 import copy
 import logging
-from model import CNN
+from model import CNN, ResNet18
 from loss import *
 from server import FLServer
 from client import FLClient
 
 num_clients = 10
-num_rounds = 500
+num_rounds = 1000
 epochs_per_client = 5
 batch_size = 64
 participate_ratio = 0.8
@@ -43,34 +44,43 @@ generator.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Logincr.log', filemode='a')
+logging.basicConfig(level=logging.INFO, filename='Log100.log', filemode='a')
 
-model_type = CNN().apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None)
+model_type = ResNet18()
+for m in model_type.modules():
+    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+        torch.nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.zeros_(m.bias)
+        m.weight.data = m.weight.data.float()
+        if m.bias is not None:
+            m.bias.data = m.bias.data.float()
 
 def main():
     # 準備數據
     # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
-    list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha)
+    # list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha, increment_period=increment_period)
+    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR100_training(num_rounds=num_rounds)
     # print(total_class)
-    print(round_idx_increment)
+    # print(round_idx_increment)
     print(list_of_client_indices_num)
-    testloader = CIFAR10_test()
+    testloader = CIFAR100_test()
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
     # for rounds in list_of_dataLoaders:
     #     for client_idx, dataLoader in enumerate(rounds):
     #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
 
-    Server = FLServer(copy.deepcopy(model_type).to(device), total_class, num_clients)
+    Server = FLServer(copy.deepcopy(model_type), total_class, num_clients)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
-    Clients = [FLClient(copy.deepcopy(model_type).to(device), list_of_dataLoaders[i], total_class, num_clients) for i in range(num_clients)]
+    Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, num_clients) for i in range(num_clients)]
 
     # 用於記錄每輪的準確率
     accuracies = []
 
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
-    accuracy_log_path = "accuracy_log_class_increment.txt"
+    accuracy_log_path = "accuracy_log_100.txt"
 
     participate_client_num = int(num_clients * participate_ratio)
     client_list = [i for i in range(num_clients)]
@@ -130,7 +140,8 @@ def main():
             Server.save_model(cur_model_path)
 
         for client_idx in range(num_clients):
-            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+            # Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
 
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
@@ -150,11 +161,11 @@ def main():
     plt.xlabel('Round')
     plt.ylabel('Test Accuracy (%)')
     plt.grid(True)
-    plt.savefig('accuracy_vs_round_dirichlet_class_increment.png')
+    plt.savefig('accuracy_vs_round_dirichlet_100.png')
     plt.show()
 
     # 示例：加載最終模型並測試
-    Server.load_model(CNN, final_model_path, device)
+    Server.load_model(final_model_path)
     accuracy, loss = Server.test_model(testloader)
     print(f"Loaded Model - Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
 

@@ -7,6 +7,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 計算KL散度
 def compute_kl_divergence(model1, model2, data_loader, device):
+    model1.to(device)
+    model2.to(device)
     model1.eval()
     model2.eval()
     kl_div = 0.0
@@ -25,6 +27,12 @@ def compute_kl_divergence(model1, model2, data_loader, device):
             kl = torch.sum(output1 * torch.log(output1 / output2), dim=1).mean()
             kl_div += kl.item() * batch_size
             total_samples += batch_size
+
+            del data, output1, output2, kl
+            torch.cuda.empty_cache()
+    
+    model1.cpu()
+    model2.cpu()
     
     return kl_div / total_samples if total_samples > 0 else float('inf')
 
@@ -40,6 +48,7 @@ def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader
     local_model = copy.deepcopy(model_type)
     local_model.load_state_dict(local_state_dict)
     local_model.to(device)
+    global_model.to(device)
 
     global_model.eval()
     local_model.eval()
@@ -48,19 +57,23 @@ def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader
     with torch.no_grad():
         for data, _ in dataLoader:
             data = data.to(device)
-            global_feature_map = global_model.conv_layers(data)
-            local_feature_map = local_model.conv_layers(data)
+            global_feature_map = global_model.extractor(data)
+            local_feature_map = local_model.extractor(data)
 
             global_feature_map_flat = global_feature_map.view(global_feature_map.size(0), -1)
             local_feature_map_flat = local_feature_map.view(local_feature_map.size(0), -1)
 
             # 計算每個 sample 的 cosine similarity -> shape: [B]
             sim = F.cosine_similarity(global_feature_map_flat, local_feature_map_flat, dim=1)
-            print(sim)
             total_cs += sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
-            print(total_cs)
 
     avg_cs_score = total_cs / len(dataLoader.dataset)
+
+    del local_model
+    del global_feature_map, local_feature_map, global_feature_map_flat, local_feature_map_flat
+    torch.cuda.empty_cache()
+    global_model.cpu()
+
     return avg_cs_score
 
 def normalized_shannon_entropy(class_counts):
