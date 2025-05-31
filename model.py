@@ -34,11 +34,16 @@ class CNN(nn.Module):
             nn.Linear(512, 10)
             # 注意：移除Softmax，因為CrossEntropyLoss內部會處理
         )
+        self.apply(self.init_weights)
 
     def forward(self, x):
         x = self.extractor(x)
         x = self.predictor(x)
         return x
+    
+    def init_weights(self, m):
+        if hasattr(m, 'weight'):
+            torch.nn.init.xavier_uniform_(m.weight)
 
 def conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
@@ -228,4 +233,13 @@ class ResNet(nn.Module):
 class ResNet18(ResNet):
     def __init__(self, **kwargs):
         super(ResNet18, self).__init__(BasicBlock, [2, 2, 2, 2], **kwargs)
+        # Initialize weight
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
+                m.weight.data = m.weight.data.float()
+                if m.bias is not None:
+                    m.bias.data = m.bias.data.float()
         
