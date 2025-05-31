@@ -8,16 +8,7 @@ class FLServer:
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
         self.model = model_type
-        for m in model_type.modules():
-            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    torch.nn.init.zeros_(m.bias)
-                m.weight.data = m.weight.data.float()
-                if m.bias is not None:
-                    m.bias.data = m.bias.data.float()
         self.all_data_size_from_last_signal = [[0 for _ in range(total_class)] for _ in range(num_clients)]
         self.signal_list = [False for _ in range(num_clients)]
         self.clients_cs_score = [0.0 for _ in range(num_clients)]

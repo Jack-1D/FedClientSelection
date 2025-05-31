@@ -14,16 +14,7 @@ class FLClient:
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.model = model_type.apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None).to(self.device)
         self.model = model_type
-        for m in model_type.modules():
-            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    torch.nn.init.zeros_(m.bias)
-                m.weight.data = m.weight.data.float()
-                if m.bias is not None:
-                    m.bias.data = m.bias.data.float()
         self.global_model_replica = self.model
         # dataLoader of each round
         self.data_loader = data_loader
@@ -44,7 +35,7 @@ class FLClient:
     def cs(self):
         return self._cs
 
-    def client_update(self, round, epochs=1, lr=0.01):
+    def client_update(self, round, epochs=5, lr=0.01):
         self.model = self.model.to(self.device)
         self.model.train()
         optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)

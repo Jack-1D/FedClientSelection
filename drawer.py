@@ -63,7 +63,77 @@ def draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, 
     plt.title('Label Consumption Over Rounds')
     plt.xlabel('Round')
     plt.ylabel('Data Consumed')
-    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3)
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=3)
     plt.grid()
+    plt.tight_layout()
     os.makedirs('experiments_plot', exist_ok=True)
     plt.savefig('experiments_plot/label_consumption.png')
+
+def draw_client_data_size(num_clients, num_rounds, list_of_data_sizes):
+    """
+    Draw each client's data size per round.
+    :param num_clients: Number of clients
+    :param num_rounds: Number of rounds
+    :param list_of_data_sizes: List of data sizes for each round
+    """
+    plt.figure(figsize=(12, 6))
+    for client_idx in range(num_clients):
+        client_sizes = [list_of_data_sizes[round_idx][client_idx] for round_idx in range(num_rounds)]
+        plt.plot(range(num_rounds), client_sizes, label=f'Client {client_idx}')
+    plt.xlabel('Round')
+    plt.ylabel('Data Size')
+    plt.title('Client Data Size per Round')
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=5)
+    plt.tight_layout()
+    os.makedirs('experiments_plot', exist_ok=True)
+    plt.savefig('experiments_plot/client_data_size_per_round.png')
+
+def draw_cumulative_data_size(num_clients, num_rounds, list_of_data_sizes):
+    """
+    Draw cumulative data size for each client over rounds.
+    :param num_clients: Number of clients
+    :param num_rounds: Number of rounds
+    :param list_of_data_sizes: List of data sizes for each round
+    """
+    cumulative_data_sizes = [[sum(list_of_data_sizes[r][client_idx] for r in range(round_idx + 1)) for client_idx in range(num_clients)] for round_idx in range(num_rounds)]
+    plt.figure(figsize=(12, 6))
+    for client_idx in range(num_clients):
+        plt.plot(range(num_rounds), [cumulative_data_sizes[round_idx][client_idx] for round_idx in range(num_rounds)], label=f'Client {client_idx}')
+    plt.xlabel('Round')
+    plt.ylabel('Cumulative Data Size')
+    plt.title('Cumulative Data Size per Client per Round')
+    plt.legend()
+    plt.tight_layout()
+    os.makedirs('experiments_plot', exist_ok=True)
+    plt.savefig('experiments_plot/cumulative_data_size_per_client.png')
+
+def draw_client_selected_times(num_clients, client_selection_counts):
+    """
+    Draw the number of times each client was selected.
+    :param num_clients: Number of clients
+    :param client_selection_counts: List of counts for each client
+    """
+    plt.figure(figsize=(10, 6))
+    plt.bar(range(num_clients), client_selection_counts, color='skyblue')
+    plt.title('Client Selection Counts')
+    plt.xlabel('Client Index')
+    plt.ylabel('Selection Count')
+    plt.grid(axis='y')
+    os.makedirs('result_plot', exist_ok=True)
+    plt.savefig('result_plot/client_selection_counts.png')
+
+def draw_accuracy(num_rounds, accuracies, dirichlet_alpha):
+    """
+    Draw the test accuracy over communication rounds.
+    :param num_rounds: Number of rounds
+    :param accuracies: List of accuracies for each round
+    :param dirichlet_alpha: Dirichlet alpha value used in the experiment
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, num_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
+    plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α={dirichlet_alpha})')
+    plt.xlabel('Round')
+    plt.ylabel('Test Accuracy (%)')
+    plt.grid(True)
+    os.makedirs('result_plot', exist_ok=True)
+    plt.savefig('result_plot/accuracy_vs_round_dirichlet_10.png')
