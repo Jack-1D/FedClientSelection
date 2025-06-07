@@ -10,19 +10,20 @@ from server import FLServer
 from client import FLClient
 
 num_clients = 10
-num_rounds = 1000
+num_rounds = 500
 epochs_per_client = 5
+learning_rate = 0.01
 batch_size = 64
 participate_ratio = 0.8
 random_seed = 42
 increment_period = 20
 dirichlet_alpha = 1
 
-alpha = 1
+alpha = 5
 beta = 1
 gamma = 1
 
-temperature = 0.8
+temperature = 0.5
 cs_threshold = 0.5
 kl_threshold = 0.01
 kl_epsilon = 1e-10
@@ -44,27 +45,19 @@ generator.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Log100.log', filemode='a')
+logging.basicConfig(level=logging.INFO, filename='Log10.log', filemode='a')
 
-model_type = ResNet18()
-for m in model_type.modules():
-    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight)
-        if m.bias is not None:
-            torch.nn.init.zeros_(m.bias)
-        m.weight.data = m.weight.data.float()
-        if m.bias is not None:
-            m.bias.data = m.bias.data.float()
+model_type = CNN()
 
 def main():
     # 準備數據
     # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
-    # list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha, increment_period=increment_period)
-    list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR100_training(num_rounds=num_rounds)
+    list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha, increment_period=increment_period)
+    # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = class_incremental_CIFAR100_training(alpha=dirichlet_alpha, num_rounds=num_rounds, batch_size=batch_size)
     # print(total_class)
     # print(round_idx_increment)
     print(list_of_client_indices_num)
-    testloader = CIFAR100_test()
+    testloader = CIFAR10_test()
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
     # for rounds in list_of_dataLoaders:
@@ -80,11 +73,14 @@ def main():
 
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
-    accuracy_log_path = "accuracy_log_100.txt"
+    accuracy_log_path = "accuracy_log_10.txt"
 
     participate_client_num = int(num_clients * participate_ratio)
     client_list = [i for i in range(num_clients)]
     probabilities = [1.0 / num_clients for _ in range(num_clients)]
+
+    # 紀錄每個client被選到的次數
+    client_selection_counts = [0 for _ in range(num_clients)]
 
     # 紀錄最後一次signal是第幾輪
     last_signal = 0
@@ -93,12 +89,15 @@ def main():
     for round in range(num_rounds):
         selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
         print(f"Selected clients for round {round + 1}: {selected_clients}")
+        # 記錄每一輪選到的client
+        for client_idx in selected_clients:
+            client_selection_counts[client_idx] += 1
 
         # 傳model給被選到的client
         Server.send_model(Clients, selected_clients)
         # 每個client進行local training
         for client_idx in selected_clients:
-            Clients[client_idx].client_update(round, epochs=epochs_per_client)
+            Clients[client_idx].client_update(round, epochs=epochs_per_client, lr=learning_rate)
             # 每個被選到的client計算CS Score
             Clients[client_idx].compute_cs_score(round)
         print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(num_clients)]}")
@@ -140,8 +139,8 @@ def main():
             Server.save_model(cur_model_path)
 
         for client_idx in range(num_clients):
-            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
-            # Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+            # Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
 
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
@@ -154,15 +153,8 @@ def main():
     final_model_path = "checkpoints/global_model_final.pth"
     Server.save_model(final_model_path)
 
-    # 繪製Round vs Accuracy圖表
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(1, num_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
-    plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α={dirichlet_alpha})')
-    plt.xlabel('Round')
-    plt.ylabel('Test Accuracy (%)')
-    plt.grid(True)
-    plt.savefig('accuracy_vs_round_dirichlet_100.png')
-    plt.show()
+    draw_client_selected_times(num_clients, client_selection_counts)
+    draw_accuracy(num_rounds, accuracies, dirichlet_alpha)
 
     # 示例：加載最終模型並測試
     Server.load_model(final_model_path)
