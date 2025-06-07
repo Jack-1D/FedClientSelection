@@ -45,9 +45,9 @@ generator.manual_seed(random_seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Log10random.log', filemode='a')
+logging.basicConfig(level=logging.INFO, filename='Logincr.log', filemode='a')
 
-model_type = ResNet18()
+model_type = CNN().apply(lambda m: torch.nn.init.xavier_uniform_(m.weight) if hasattr(m, 'weight') else None)
 
 def main():
     # 準備數據
