@@ -39,6 +39,8 @@ class FLClient:
         self.model = self.model.to(self.device)
         self.model.train()
         optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
+        # optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+        # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
         criterion = nn.CrossEntropyLoss()
         scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
         for epoch in range(epochs):
@@ -58,8 +60,9 @@ class FLClient:
                     loss.backward()
                     optimizer.step()
 
-                del data, target, output, loss
-                torch.cuda.empty_cache()
+            # scheduler.step()
+            del data, target, output, loss
+            torch.cuda.empty_cache()
         self.model = self.model.to("cpu")
         torch.cuda.empty_cache()
 
@@ -119,11 +122,11 @@ class FLClient:
         return False
         
 
-    def check_signal(self, client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
-        # if (round+1) in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
-        if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+    def check_signal(self, client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
+        if (round+1) in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+        # if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
             print(f"Client {client_idx}, signal:", 
-                #   f"new_class_incoming" if (round+1) in round_idx_increment else "",
+                  f"new_class_incoming" if (round+1) in round_idx_increment else "",
                   f"cs={self._cs:.4f}" if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
                   f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else ""
