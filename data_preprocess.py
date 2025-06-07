@@ -1,3 +1,4 @@
+import torchvision.transforms as transforms
 import torchvision
 import numpy as np
 from torch.utils.data import Subset
@@ -20,9 +21,9 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
     # 加載 CIFAR-10 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     train_pool = defaultdict(list)
@@ -99,9 +100,9 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
     :return: dataLoader
     """
     # 加載 CIFAR-10 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     train_pool = defaultdict(list)
@@ -165,9 +166,9 @@ def CIFAR10_test():
     :return: dataLoader
     """
     # 加載 CIFAR-10 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
     return DataLoader(testset, batch_size=testset.data.shape[0], shuffle=False)
@@ -184,9 +185,11 @@ def distribution_shifting_CIFAR100_training(alpha: float = 1, num_clients: int =
     :param rescue_ratio: 救援比例
     :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
     trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     train_pool = defaultdict(list)
@@ -268,12 +271,12 @@ def CIFAR100_test():
     :return: dataLoader
     """
     # 加載 CIFAR-10 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
+    transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+])
     testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
-    return DataLoader(testset, batch_size=testset.data.shape[0], shuffle=False)
+    return DataLoader(testset, batch_size=100, shuffle=False)
 
 def distribution_shifting_CIFAR100_training_ver2(alpha: float = 0.1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64 , strength: float = 1e2, epsilon: float = 1e-8, rescue_ratio: float = 0.05):
     """
@@ -294,9 +297,9 @@ def distribution_shifting_CIFAR100_training_ver2(alpha: float = 0.1, num_clients
     extra_label_num = 5
 
     # 加載 CIFAR-100 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
 

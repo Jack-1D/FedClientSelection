@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import math
+torch.manual_seed(42)
 
 class CNN(nn.Module):
     def __init__(self):
