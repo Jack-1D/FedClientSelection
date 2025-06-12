@@ -65,7 +65,7 @@ class FLServer:
         print(self.clients_cs_score)
         print(self.clients_label_size_from_last_signal_proportions)
         print(self.clients_nse)
-        score = [alpha * self.clients_cs_score[i] + beta * self.clients_label_size_from_last_signal_proportions[i] + gamma * self.clients_nse[i] for i in range(self.num_clients)]
+        score = [(alpha * self.clients_cs_score[i] + beta * self.clients_label_size_from_last_signal_proportions[i] + gamma * self.clients_nse[i]) / (alpha + beta + gamma) for i in range(self.num_clients)]
         scaled_score = torch.tensor(score) / temperature
         probabilities = F.softmax(scaled_score, dim=0).numpy()
         return probabilities

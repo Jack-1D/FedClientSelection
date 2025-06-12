@@ -1,7 +1,15 @@
 import torch.nn as nn
 import torch
 import math
-torch.manual_seed(42)
+
+def get_model(model_type, random_seed=42):
+    torch.manual_seed(random_seed)
+    if model_type == "CNN":
+        return CNN()
+    elif model_type == "ResNet18":
+        return ResNet18()
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
 
 class CNN(nn.Module):
     def __init__(self):

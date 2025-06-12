@@ -4,11 +4,7 @@ import numpy as np
 from torch.utils.data import Subset
 from collections import defaultdict
 from torch.utils.data import DataLoader
-import copy
-import math
 from drawer import *
-
-np.random.seed(42)
 
 def get_training_data(trainset: str = "CIFAR10", 
                       distribution_shifting: bool = True,
@@ -23,7 +19,8 @@ def get_training_data(trainset: str = "CIFAR10",
                       rounds_to_get_new_data: int = 100,
                       data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
                       start_class_num: int = 5,
-                      increment_period: int = 20):
+                      increment_period: int = 20,
+                      random_seed: int = 42):
     """
     根據不同的數據集和分佈生成訓練數據
     :param trainset: 數據集名稱，支持 CIFAR10 和 CIFAR100
@@ -36,6 +33,7 @@ def get_training_data(trainset: str = "CIFAR10",
     :param rescue_ratio: 救援比例
     :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
+    np.random.seed(random_seed)
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
@@ -87,7 +85,9 @@ def get_training_data(trainset: str = "CIFAR10",
         raise ValueError("At least one of distribution_shifting or class_increment must be True.")
 
 def get_test_data(testset: str = "CIFAR10",
-                  batch_size: int = 128):
+                  batch_size: int = 128,
+                  random_seed: int = 42):
+    np.random.seed(random_seed)
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),

@@ -4,116 +4,90 @@ from data_preprocess import *
 import torch
 import copy
 import logging
-from model import CNN, ResNet18
+from model import get_model
 from loss import *
 from server import FLServer
 from client import FLClient
+from option import args_parser
 
-trainset = "CIFAR10"
-distribution_shifting = True
-class_increment = True
-num_clients = 10
-num_rounds = 400
-epochs_per_client = 5
-learning_rate = 0.01
-batch_size = 64
-test_batch_size = 100
-participate_ratio = 0.8
-random_seed = 42
-start_class_num = 5
-increment_period = 20
-data_distribution_alpha = 1
+args = args_parser()
 
-new_distribution_weight = 0.1
-data_size_gain_ratio = 0.1
-new_data_size_distribution_weight = 0.5
-rounds_to_get_new_data = 100
-data_size_alphas = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]
-
-alpha = 5
-beta = 1
-gamma = 1
-
-temperature = 0.6
-cs_threshold = 0.5
-kl_threshold = 0.01
-kl_epsilon = 1e-10
+model_type = get_model(args.model_type, random_seed=args.random_seed)
 
 # 設置隨機種子以確保可重現性
-torch.manual_seed(random_seed)
-np.random.seed(random_seed)
+torch.manual_seed(args.random_seed)
+np.random.seed(args.random_seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if torch.cuda.is_available():
-    torch.cuda.manual_seed(random_seed)
-    torch.cuda.manual_seed_all(random_seed)
+    torch.cuda.manual_seed(args.random_seed)
+    torch.cuda.manual_seed_all(args.random_seed)
 
 # 確保 DataLoader 的隨機性可控
 generator = torch.Generator()
-generator.manual_seed(random_seed)
+generator.manual_seed(args.random_seed)
 
 # 強制使用確定性操作
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-logging.basicConfig(level=logging.INFO, filename='Log10.log', filemode='a')
-
-model_type = CNN()
+logging.basicConfig(level=logging.INFO, filename=args.log_file, filemode='a')
 
 def main():
     # 準備數據
     list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, \
     end_training_exclusive, round_idx_increment = get_training_data(
-        trainset=trainset,
-        distribution_shifting=distribution_shifting,
-        class_increment=class_increment,
-        data_distribution_alpha=data_distribution_alpha,
-        num_clients=num_clients,
-        num_rounds=num_rounds,
-        batch_size=batch_size,
-        new_distribution_weight=new_distribution_weight,
-        data_size_gain_ratio=data_size_gain_ratio,
-        new_data_size_distribution_weight=new_data_size_distribution_weight,
-        rounds_to_get_new_data=rounds_to_get_new_data,
-        data_size_alphas=data_size_alphas,
-        start_class_num=start_class_num,
-        increment_period=increment_period
+        trainset=args.dataset,
+        distribution_shifting=args.distribution_shifting,
+        class_increment=args.class_increment,
+        data_distribution_alpha=args.data_distribution_alpha,
+        num_clients=args.num_clients,
+        num_rounds=args.num_rounds,
+        batch_size=args.batch_size,
+        new_distribution_weight=args.new_distribution_weight,
+        data_size_gain_ratio=args.data_size_gain_ratio,
+        new_data_size_distribution_weight=args.new_data_size_distribution_weight,
+        rounds_to_get_new_data=args.rounds_to_get_new_data,
+        data_size_alphas=args.data_size_alphas,
+        start_class_num=args.start_class_num,
+        increment_period=args.increment_period,
+        random_seed=args.random_seed
     )
     # print(total_class)
     # print(round_idx_increment)
     print(list_of_client_indices_num)
     testloader = get_test_data(
-        testset=trainset,
-        batch_size=test_batch_size)
+        testset=args.dataset,
+        batch_size=args.test_batch_size,
+        random_seed=args.random_seed)
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
     # for rounds in list_of_dataLoaders:
     #     for client_idx, dataLoader in enumerate(rounds):
     #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
 
-    Server = FLServer(copy.deepcopy(model_type), total_class, num_clients)
+    Server = FLServer(copy.deepcopy(model_type), total_class, args.num_clients)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
-    Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, num_clients) for i in range(num_clients)]
+    Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients) for i in range(args.num_clients)]
 
     # 用於記錄每輪的準確率
     accuracies = []
 
     # 創建保存模型的目錄
     os.makedirs("checkpoints", exist_ok=True)
-    accuracy_log_path = "accuracy_log_10.txt"
 
-    participate_client_num = int(num_clients * participate_ratio)
-    client_list = [i for i in range(num_clients)]
-    probabilities = [1.0 / num_clients for _ in range(num_clients)]
+    participate_client_num = int(args.num_clients * args.participate_ratio)
+    client_list = [i for i in range(args.num_clients)]
+    probabilities = [1.0 / args.num_clients for _ in range(args.num_clients)]
 
     # 紀錄每個client被選到的次數
-    client_selection_counts = [0 for _ in range(num_clients)]
+    client_selection_counts = [0 for _ in range(args.num_clients)]
 
     # 紀錄最後一次signal是第幾輪
     last_signal = 0
 
     # 聯邦學習訓練
-    for round in range(num_rounds):
+    for round in range(end_training_exclusive):
         selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
         print(f"Selected clients for round {round + 1}: {selected_clients}")
         # 記錄每一輪選到的client
@@ -124,14 +98,14 @@ def main():
         Server.send_model(Clients, selected_clients)
         # 每個client進行local training
         for client_idx in selected_clients:
-            Clients[client_idx].client_update(round, epochs=epochs_per_client, lr=learning_rate)
+            Clients[client_idx].client_update(round, epochs=args.epochs_per_client, lr=args.learning_rate)
             # 每個被選到的client計算CS Score
             Clients[client_idx].compute_cs_score(round)
-        print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(num_clients)]}")
-        for client_idx in range(num_clients):
+        print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(args.num_clients)]}")
+        for client_idx in range(args.num_clients):
             # 更新data size
             Clients[client_idx].data_size_from_last_signal += list_of_data_sizes[round][client_idx]
-            print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[client_idx][round].dataset.indices) - set(list_of_dataLoaders[client_idx][last_signal].dataset.indices))}")
+            # print(f"round: {round}, client: {client_idx}, defference: {list(set(list_of_dataLoaders[client_idx][round].dataset.indices) - set(list_of_dataLoaders[client_idx][last_signal].dataset.indices))}")
             Clients[client_idx].label_size_to_cur = [Clients[client_idx].label_size_to_cur[i] + list_of_client_indices_num[round][client_idx][i] for i in range(total_class)]
             # 更新每個client新增的各label數量
             Clients[client_idx].label_size_from_last_signal = [Clients[client_idx].label_size_from_last_signal[i] + list_of_client_indices_num[round][client_idx][i] for i in range(total_class)]
@@ -140,38 +114,35 @@ def main():
             # 更新nse
             Clients[client_idx].compute_nse()
         # 更新每個client的資料量佔比
-        for client_idx in range(num_clients):
+        for client_idx in range(args.num_clients):
             Clients[client_idx].send_data_size_from_last_signal(Server, client_idx)
         Server.send_all_data_size_from_last_signal(Clients)
-        for client_idx in range(num_clients):
+        for client_idx in range(args.num_clients):
             Clients[client_idx].compute_label_size_from_last_signal_rank()
-        print(f"label_size_from_last_signal_proportions: {[Clients[i].data_size_from_last_signal_proportions for i in range(num_clients)]}")
-        print(f"clients_nse: {[Clients[i].nse for i in range(num_clients)]}")
+        print(f"label_size_from_last_signal_proportions: {[Clients[i].data_size_from_last_signal_proportions for i in range(args.num_clients)]}")
+        print(f"clients_nse: {[Clients[i].nse for i in range(args.num_clients)]}")
         print(f"data_size_from_last_signal_rank: {Clients[0].data_size_from_last_signal_rank}")
         print(f"label_size_from_last_signal:{Clients[0].all_data_size_from_last_signal}")
-        print([Clients[i].data_size_from_last_signal for i in range(num_clients)])
-        print([np.sum(Clients[0].all_data_size_from_last_signal[i]) for i in range(num_clients)])
-        print([Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(num_clients)])
+        print([Clients[i].data_size_from_last_signal for i in range(args.num_clients)])
+        print([np.sum(Clients[0].all_data_size_from_last_signal[i]) for i in range(args.num_clients)])
+        print([Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
 
-        Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(num_clients)])
+        Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
 
         accuracy, loss = Server.test_model(testloader)
         accuracies.append(accuracy)
-        print(f"Round {round + 1}/{num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
-        logging.info(f"Round {round + 1}/{num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
-        with open(accuracy_log_path, "a") as f:
-            f.write(f"{round + 1},{accuracy:.2f},{loss:.4f}\n")
+        print(f"Round {round + 1}/{args.num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
+        logging.info(f"Round {round + 1}/{args.num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
         if round % 10 == 0:
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             Server.save_model(cur_model_path)
 
-        for client_idx in range(num_clients):
-            # Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
-            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon)
+        for client_idx in range(args.num_clients):
+            Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, args.cs_threshold, round, last_signal, args.kl_threshold, args.kl_epsilon)
 
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(alpha, beta, gamma, temperature)
+            probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature)
             Server.do_snapshot(Clients)
             print(f"Updated probabilities: {probabilities}")
             last_signal = round
@@ -180,8 +151,8 @@ def main():
     final_model_path = "checkpoints/global_model_final.pth"
     Server.save_model(final_model_path)
 
-    draw_client_selected_times(num_clients, client_selection_counts)
-    draw_accuracy(num_rounds, accuracies, data_distribution_alpha)
+    draw_client_selected_times(args.num_clients, client_selection_counts)
+    draw_accuracy(args.num_rounds, accuracies, args.data_distribution_alpha)
 
     # 示例：加載最終模型並測試
     Server.load_model(final_model_path)
