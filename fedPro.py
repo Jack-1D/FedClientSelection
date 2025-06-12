@@ -9,21 +9,32 @@ from loss import *
 from server import FLServer
 from client import FLClient
 
+trainset = "CIFAR10"
+distribution_shifting = True
+class_increment = True
 num_clients = 10
-num_rounds = 500
+num_rounds = 400
 epochs_per_client = 5
 learning_rate = 0.01
 batch_size = 64
+test_batch_size = 100
 participate_ratio = 0.8
 random_seed = 42
+start_class_num = 5
 increment_period = 20
-dirichlet_alpha = 1
+data_distribution_alpha = 1
+
+new_distribution_weight = 0.1
+data_size_gain_ratio = 0.1
+new_data_size_distribution_weight = 0.5
+rounds_to_get_new_data = 100
+data_size_alphas = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]
 
 alpha = 5
 beta = 1
 gamma = 1
 
-temperature = 0.5
+temperature = 0.6
 cs_threshold = 0.5
 kl_threshold = 0.01
 kl_epsilon = 1e-10
@@ -51,13 +62,29 @@ model_type = CNN()
 
 def main():
     # 準備數據
-    # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = distribution_shifting_CIFAR10_training(num_rounds=num_rounds)
-    list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, round_idx_increment = class_incremental_CIFAR10_training(num_rounds=num_rounds, alpha=dirichlet_alpha, increment_period=increment_period)
-    # list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, total_class, list_of_client_indices_num = class_incremental_CIFAR100_training(alpha=dirichlet_alpha, num_rounds=num_rounds, batch_size=batch_size)
+    list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, \
+    end_training_exclusive, round_idx_increment = get_training_data(
+        trainset=trainset,
+        distribution_shifting=distribution_shifting,
+        class_increment=class_increment,
+        data_distribution_alpha=data_distribution_alpha,
+        num_clients=num_clients,
+        num_rounds=num_rounds,
+        batch_size=batch_size,
+        new_distribution_weight=new_distribution_weight,
+        data_size_gain_ratio=data_size_gain_ratio,
+        new_data_size_distribution_weight=new_data_size_distribution_weight,
+        rounds_to_get_new_data=rounds_to_get_new_data,
+        data_size_alphas=data_size_alphas,
+        start_class_num=start_class_num,
+        increment_period=increment_period
+    )
     # print(total_class)
     # print(round_idx_increment)
     print(list_of_client_indices_num)
-    testloader = CIFAR10_test()
+    testloader = get_test_data(
+        testset=trainset,
+        batch_size=test_batch_size)
     # print(list_of_data_sizes)
     # print(list_of_data_distributions)
     # for rounds in list_of_dataLoaders:
@@ -154,7 +181,7 @@ def main():
     Server.save_model(final_model_path)
 
     draw_client_selected_times(num_clients, client_selection_counts)
-    draw_accuracy(num_rounds, accuracies, dirichlet_alpha)
+    draw_accuracy(num_rounds, accuracies, data_distribution_alpha)
 
     # 示例：加載最終模型並測試
     Server.load_model(final_model_path)
