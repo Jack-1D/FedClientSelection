@@ -1,0 +1,35 @@
+$arg = @(
+    "-u", "main.py",
+    "--dataset", "CIFAR100",
+    "--method", "proposed",
+    "--model_type", "ResNet18",
+    "--distribution_shifting",
+    "--data_distribution_alpha", "1",
+    "--num_clients", "10",
+    "--num_rounds", "400",
+    "--batch_size", "64",
+    "--test_batch_size", "100",
+    "--new_distribution_weight", "0.1",
+    "--data_size_gain_ratio", "0.1",
+    "--new_data_size_distribution_weight", "0.5",
+    "--rounds_to_get_new_data", "100",
+    "--data_size_alphas", "`"[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]`"",
+    "--start_class_num", "10",
+    "--increment_period", "1",
+    "--epochs_per_client", "2",
+    "--learning_rate", "0.01",
+    "--participate_ratio", "0.8",
+    "--random_seed", "42",
+    "--alpha", "1",
+    "--beta", "1",
+    "--gamma", "1",
+    "--temperature", "0.5",
+    "--cs_threshold", "0.5",
+    "--kl_threshold", "0.01",
+    "--kl_epsilon", "1e-10",
+    "--log_file", "Log10.log"
+)
+Start-Process -FilePath "python" -ArgumentList $arg `
+  -RedirectStandardOutput "output.log" `
+  -RedirectStandardError "output_err.log" `
+  -WindowStyle Hidden
