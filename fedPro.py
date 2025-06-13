@@ -1,39 +1,12 @@
-import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-from data_preprocess import *
-import torch
-import copy
-import logging
-from model import get_model
-from loss import *
 from server import FLServer
 from client import FLClient
-from option import args_parser
+from data_preprocess import *
+import copy
+import logging
+from set_seed import set_seed
 
-args = args_parser()
-
-model_type = get_model(args.model_type, random_seed=args.random_seed)
-
-# 設置隨機種子以確保可重現性
-torch.manual_seed(args.random_seed)
-np.random.seed(args.random_seed)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-if torch.cuda.is_available():
-    torch.cuda.manual_seed(args.random_seed)
-    torch.cuda.manual_seed_all(args.random_seed)
-
-# 確保 DataLoader 的隨機性可控
-generator = torch.Generator()
-generator.manual_seed(args.random_seed)
-
-# 強制使用確定性操作
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-
-logging.basicConfig(level=logging.INFO, filename=args.log_file, filemode='a')
-
-def main():
+def fedPro(args, model_type):
+    set_seed(args)
     # 準備數據
     list_of_dataLoaders, list_of_data_sizes, total_class, list_of_client_indices_num, \
     end_training_exclusive, round_idx_increment = get_training_data(
@@ -158,6 +131,3 @@ def main():
     Server.load_model(final_model_path)
     accuracy, loss = Server.test_model(testloader)
     print(f"Loaded Model - Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
-
-if __name__ == "__main__":
-    main()

@@ -1,9 +1,12 @@
 #!/bin/bash
 # filepath: /home/hscc/jack/FedClientSelection/fedPro.sh
 
-nohup python3.10 -u fedPro.py \
-    --dataset CIFAR10 \
-    --model_type CNN \
+nohup python3.10 -u main.py \
+    --dataset CIFAR100 \
+    --method proposed \
+    --model_type ResNet18 \
+    --distribution_shifting \
+    --data_distribution_alpha 1 \
     --num_clients 10 \
     --num_rounds 400 \
     --batch_size 64 \
