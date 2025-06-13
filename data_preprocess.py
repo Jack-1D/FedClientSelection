@@ -6,12 +6,25 @@ from collections import defaultdict
 from torch.utils.data import DataLoader
 from drawer import *
 
-np.random.seed(42)
-
-def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64 , strength: float = 1e2, epsilon: float = 1e-8, rescue_ratio: float = 0.05):
+def get_training_data(trainset: str = "CIFAR10", 
+                      distribution_shifting: bool = True,
+                      class_increment: bool = True,
+                      data_distribution_alpha: float = 1, 
+                      num_clients: int = 10, 
+                      num_rounds: int = 400, 
+                      batch_size: int = 64, 
+                      new_distribution_weight: float = 0.1, 
+                      data_size_gain_ratio: float = 0.1, 
+                      new_data_size_distribution_weight: float = 0.5,
+                      rounds_to_get_new_data: int = 100,
+                      data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+                      start_class_num: int = 5,
+                      increment_period: int = 20,
+                      random_seed: int = 42):
     """
-    使用 Dirichlet 分配生成分佈
-    :param alpha: Dirichlet 分配的參數
+    根據不同的數據集和分佈生成訓練數據
+    :param trainset: 數據集名稱，支持 CIFAR10 和 CIFAR100
+    :param data_distribution_alpha: Dirichlet 分配的參數
     :param num_clients: 客戶端數量
     :param num_rounds: 輪數
     :param batch_size: 批次大小
@@ -20,19 +33,122 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     :param rescue_ratio: 救援比例
     :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
-    # 加載 CIFAR-10 數據集
+    np.random.seed(random_seed)
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    if trainset == "CIFAR10":
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    elif trainset == "CIFAR100":
+        trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+    else:
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
+    
+    if distribution_shifting and class_increment:
+        return distribution_shifting_class_increment_training(trainset=trainset,
+                                                              data_distribution_alpha=data_distribution_alpha, 
+                                                              num_clients=num_clients, 
+                                                              num_rounds=num_rounds, 
+                                                              batch_size=batch_size, 
+                                                              new_distribution_weight=new_distribution_weight, 
+                                                              data_size_gain_ratio=data_size_gain_ratio, 
+                                                              new_data_size_distribution_weight=new_data_size_distribution_weight, 
+                                                              rounds_to_get_new_data=rounds_to_get_new_data, 
+                                                              data_size_alphas=data_size_alphas,
+                                                              start_class_num=start_class_num,
+                                                              increment_period=increment_period)
+    elif distribution_shifting:
+        return distribution_shifting_training(trainset=trainset,
+                                       data_distribution_alpha=data_distribution_alpha, 
+                                       num_clients=num_clients, 
+                                       num_rounds=num_rounds, 
+                                       batch_size=batch_size, 
+                                       new_distribution_weight=new_distribution_weight, 
+                                       data_size_gain_ratio=data_size_gain_ratio, 
+                                       new_data_size_distribution_weight=new_data_size_distribution_weight, 
+                                       rounds_to_get_new_data=rounds_to_get_new_data, 
+                                       data_size_alphas=data_size_alphas)
+    elif class_increment:
+        return class_increment_training(trainset=trainset,
+                                 data_distribution_alpha=data_distribution_alpha,
+                                 num_clients=num_clients,
+                                 num_rounds=num_rounds,
+                                 batch_size=batch_size,
+                                 data_size_gain_ratio=data_size_gain_ratio,
+                                 new_data_size_distribution_weight=new_data_size_distribution_weight,
+                                 rounds_to_get_new_data=rounds_to_get_new_data,
+                                 data_size_alphas=data_size_alphas,
+                                 start_class_num=start_class_num,
+                                 increment_period=increment_period)
+    else:
+        raise ValueError("At least one of distribution_shifting or class_increment must be True.")
+
+def get_test_data(testset: str = "CIFAR10",
+                  batch_size: int = 128,
+                  random_seed: int = 42):
+    np.random.seed(random_seed)
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+    ])
+    if testset == "CIFAR10":
+        testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    elif testset == "CIFAR100":
+        testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+    else:
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
+    
+    return DataLoader(testset, batch_size=batch_size, shuffle=False)
+    
+    
+
+def distribution_shifting_training(
+        trainset: torchvision.datasets.VisionDataset = None,
+        data_distribution_alpha: float = 1, 
+        num_clients: int = 10, 
+        num_rounds: int = 400, 
+        batch_size: int = 64,
+        new_distribution_weight: float = 0.1,
+        data_size_gain_ratio: float = 0.1,
+        new_data_size_distribution_weight: float = 0.5,
+        rounds_to_get_new_data: int = 100,
+        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]):
+    """
+    分布轉移的 CIFAR-100 訓練資料分配
+    Args:
+        data_distribution_alpha (float): Dirichlet 分布的 alpha 參數，用於控制資料分布的多樣性
+        num_clients (int): 客戶端數量
+        num_rounds (int): 訓練輪數
+        batch_size (int): 每個客戶端的批次大小
+        new_distribution_weight (float): 新分布與舊分布的權重比例
+        data_size_gain_ratio (float): 資料量增長比例
+        new_data_size_distribution_weight (float): 新資料量分布與舊資料量分布的權重比例
+        rounds_to_get_new_data (int): 每多少輪獲取新的資料量分布
+        data_size_alphas (list[float]): 每個客戶端的資料量比例參數
+    Returns:
+        list_of_dataLoaders (list): 每輪每個客戶端的 DataLoader
+        list_of_data_sizes (list): 每輪每個客戶端的資料量
+        list_of_data_distributions (list): 每輪每個客戶端的資料分布
+        num_classes (int): 資料集的類別數
+        list_of_client_indices_num (list): 每輪每個客戶端每個類別的資料量
+        trainset: CIFAR-100 訓練集
+    """
+    # 檢查 data_size_alphas 的長度是否與 num_clients 相符
+    if len(data_size_alphas) != num_clients:
+        raise ValueError(f"Length of data_size_alphas ({len(data_size_alphas)}) must match num_clients ({num_clients}).")
+
     train_pool = defaultdict(list)
     for idx, (image, label) in enumerate(trainset):
         train_pool[label].append(idx)
-    # 初始資料量
-    sample_of_each_clients = [np.random.randint(1, 50) for _ in range(num_clients)]
-    # 初始資料分布
-    init_proportions = np.random.dirichlet([alpha] * num_clients, len(trainset.classes))
+    
+    # 第一輪的總資料量
+    total_samples_this_round = len(trainset.targets) / rounds_to_get_new_data
+    # 第一輪每個client的資料量佔比 [num_clients]
+    data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+    # 初始資料分布 [num_clients, num_classes]
+    data_distribution_clients_proportions = np.random.dirichlet([data_distribution_alpha] 
+                                                                * len(trainset.classes), num_clients)
     # 每一輪每個client拿到的資料
     client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client的dataLoader
@@ -43,16 +159,27 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
     list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client每個class的資料量
     list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
-    new_proportions = init_proportions.copy()
+
+    # 避免dataLoader為空
+    for client_idx in range(num_clients):
+        random_class = np.random.choice(len(trainset.classes), size=1, replace=False)[0]
+        if len(train_pool[random_class]) > 0:
+            selected_indices = np.random.choice(train_pool[random_class], size=min(len(train_pool[random_class]), 1), replace=False)
+            client_get_indices[0][client_idx].extend(selected_indices)
+            list_of_client_indices_num[0][client_idx][random_class] += len(selected_indices)
+            train_pool[random_class] = [idx for idx in train_pool[random_class] if idx not in selected_indices]
+            list_of_data_sizes[0][client_idx] += len(selected_indices)
+
     cumu = [0 for _ in range(num_clients)]
-    all_distributions = [init_proportions]
+    all_distributions = [data_distribution_clients_proportions]
+    record_end = -1
+    flag = True
     for round_idx in range(num_rounds):
-        # print(f"Round {round_idx}, {new_proportions}")
         for client_idx in range(num_clients):
             for class_idx in range(len(trainset.classes)):
                 # 隨機選擇資料
                 if len(train_pool[class_idx]) > 0:
-                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*new_proportions[client_idx][class_idx]))
+                    avail_data_size = min(len(train_pool[class_idx]), round(total_samples_this_round*data_size_clients_proportions[client_idx]*data_distribution_clients_proportions[client_idx][class_idx]))
                     selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
                     client_get_indices[round_idx][client_idx].extend(selected_indices)
                     # 紀錄這一輪這個client在這個class的資料量
@@ -62,56 +189,104 @@ def distribution_shifting_CIFAR10_training(alpha: float = 1, num_clients: int = 
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
             # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(new_proportions[client_idx])
-        # 資料量更新
-        sample_of_each_clients = [np.clip(samples + np.random.randint(-10, 10), 1, 150) for samples in sample_of_each_clients]
+            list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
+        # 檢查資料是否用完
+        remaining_data = sum([len(indices) for indices in train_pool.values()])
+        if remaining_data == 0 and flag:
+            record_end = round_idx
+            flag = False
+        # 總資料量更新
+        total_samples_this_round = total_samples_this_round * (1 + np.random.uniform(-data_size_gain_ratio, data_size_gain_ratio))
+        total_samples_this_round = np.clip(total_samples_this_round,
+                            len(trainset.targets) / rounds_to_get_new_data * (1 - data_size_gain_ratio), 
+                            len(trainset.targets) / rounds_to_get_new_data * (1 + data_size_gain_ratio))
+        # 資料量分布更新
+        new_data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+        data_size_clients_proportions = new_data_size_distribution_weight * new_data_size_clients_proportions + (1 - new_data_size_distribution_weight) * data_size_clients_proportions
         # 資料分布更新
-        new_proportions = (1 - rescue_ratio) * new_proportions + rescue_ratio * init_proportions
-        new_proportions = new_proportions * strength
-        new_proportions = np.clip(new_proportions, epsilon, None)
-        new_proportions = np.array([np.random.dirichlet(a) for a in new_proportions])
+        new_proportions = np.random.dirichlet([data_distribution_alpha] * len(trainset.classes), num_clients)
+        data_distribution_clients_proportions = new_distribution_weight * new_proportions + (1 - new_distribution_weight) * data_distribution_clients_proportions
         
-        # print("proportions:", new_proportions[0])
-        all_distributions.append(new_proportions)
+        all_distributions.append(data_distribution_clients_proportions)
     # Plot each client's data size per class for each round, separated by client
     draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
     # 顯示每一輪資料量消耗的圖
     draw_data_consumption(num_rounds, list_of_data_sizes)
     # 顯示每個label的資料消耗圖
     draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset)
+    # 畫每個client每一輪資料量的圖
+    draw_client_data_size(num_clients, num_rounds, list_of_data_sizes)
+    # 畫每個client每一輪的累積資料量的圖
+    draw_cumulative_data_size(num_clients, num_rounds, list_of_data_sizes)
+    
+    
     # 每個client累積拿到的indices
     cumu = [[] for _ in range(num_clients)]
     for round_idx in range(num_rounds):
         for client_idx in range(num_clients):
             cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
+            # client_train_indices_each_round[round_idx][client_idx] = list(cumu[client_idx])
             loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
             list_of_dataLoaders[round_idx][client_idx] = loader
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
+    # 檢查資料是否用完
+    remaining_data = sum([len(indices) for indices in train_pool.values()])
+    if remaining_data != 0:
+        print("Data not exhausted, remaining samples:", remaining_data)
+        for class_idx, indices in train_pool.items():
+            if len(indices) > 0:
+                print(f"Class {class_idx} has {len(indices)} samples remaining.")
+    else:
+        print("All data exhausted, last round:", record_end)
+    end_training_exclusive = record_end + 1 if record_end != -1 else num_rounds
+    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num, end_training_exclusive, [-1]
 
-    return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
+def class_increment_training(
+        trainset: torchvision.datasets.VisionDataset = None,
+        data_distribution_alpha: float = 1, 
+        num_clients: int = 10, 
+        num_rounds: int = 600, 
+        batch_size: int = 64,
+        data_size_gain_ratio: float = 0.1,
+        new_data_size_distribution_weight: float = 0.5,
+        rounds_to_get_new_data: int = 100,
+        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+        start_class_num: int = 10,
+        increment_period: int = 1):
+    """
+    分布轉移的 CIFAR-100 訓練資料分配
+    Args:
+        data_distribution_alpha (float): Dirichlet 分布的 alpha 參數，用於控制資料分布的多樣性
+        num_clients (int): 客戶端數量
+        num_rounds (int): 訓練輪數
+        batch_size (int): 每個客戶端的批次大小
+        new_distribution_weight (float): 新分布與舊分布的權重比例
+        data_size_gain_ratio (float): 資料量增長比例
+        new_data_size_distribution_weight (float): 新資料量分布與舊資料量分布的權重比例
+        rounds_to_get_new_data (int): 每多少輪獲取新的資料量分布
+        data_size_alphas (list[float]): 每個客戶端的資料量比例參數
+    Returns:
+        list_of_dataLoaders (list): 每輪每個客戶端的 DataLoader
+        list_of_data_sizes (list): 每輪每個客戶端的資料量
+        list_of_data_distributions (list): 每輪每個客戶端的資料分布
+        num_classes (int): 資料集的類別數
+        list_of_client_indices_num (list): 每輪每個客戶端每個類別的資料量
+        trainset: CIFAR-100 訓練集
+    """
+    # 檢查 data_size_alphas 的長度是否與 num_clients 相符
+    if len(data_size_alphas) != num_clients:
+        raise ValueError(f"Length of data_size_alphas ({len(data_size_alphas)}) must match num_clients ({num_clients}).")
 
-def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64, start_class_num: int = 5, increment_period: int = 20):
-    """
-    使用 CIFAR-10 數據集進行類別增量學習
-    :param num_clients: 客戶端數量
-    :param num_rounds: 輪數
-    :param batch_size: 批次大小
-    :return: dataLoader
-    """
-    # 加載 CIFAR-10 數據集
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     train_pool = defaultdict(list)
     for idx, (image, label) in enumerate(trainset):
         train_pool[label].append(idx)
-    # 初始資料量
-    sample_of_each_clients = [np.random.randint(1, 50) for _ in range(num_clients)]
-    # 初始資料分布
-    proportions = np.random.dirichlet([alpha] * num_clients, len(trainset.classes))
+    
+    # 第一輪的總資料量
+    total_samples_this_round = len(trainset.targets) / rounds_to_get_new_data
+    # 第一輪每個client的資料量佔比 [num_clients]
+    data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+    # 初始資料分布 [num_clients, num_classes]
+    data_distribution_clients_proportions = np.random.dirichlet([data_distribution_alpha] 
+                                                                * len(trainset.classes), num_clients)
     # 每一輪每個client拿到的資料
     client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client的dataLoader
@@ -120,10 +295,23 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
     list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client每個class的資料量
     list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
-    cumu = [0 for _ in range(num_clients)]
     # 紀錄新class進入的round index
     round_idx_increment = []
     cur_class_num = start_class_num
+
+    # 避免dataLoader為空
+    for client_idx in range(num_clients):
+        random_class = np.random.choice(start_class_num, size=1, replace=False)[0]
+        if len(train_pool[random_class]) > 0:
+            selected_indices = np.random.choice(train_pool[random_class], size=min(len(train_pool[random_class]), 1), replace=False)
+            client_get_indices[0][client_idx].extend(selected_indices)
+            list_of_client_indices_num[0][client_idx][random_class] += len(selected_indices)
+            train_pool[random_class] = [idx for idx in train_pool[random_class] if idx not in selected_indices]
+            list_of_data_sizes[0][client_idx] += len(selected_indices)
+
+    cumu = [0 for _ in range(num_clients)]
+    record_end = -1
+    flag = True
     for round_idx in range(num_rounds):
         if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
             cur_class_num += 1
@@ -132,7 +320,7 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
             for class_idx in range(cur_class_num):
                 # 隨機選擇資料
                 if len(train_pool[class_idx]) > 0:
-                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*proportions[client_idx][class_idx]))
+                    avail_data_size = min(len(train_pool[class_idx]), round(total_samples_this_round*data_size_clients_proportions[client_idx]*data_distribution_clients_proportions[client_idx][class_idx]))
                     selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
                     client_get_indices[round_idx][client_idx].extend(selected_indices)
                     # 紀錄這一輪這個client在這個class的資料量
@@ -141,272 +329,19 @@ def class_incremental_CIFAR10_training(alpha: float = 1, num_clients: int = 10, 
                     train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
-        # 資料量更新
-        sample_of_each_clients = [np.clip(samples + np.random.randint(-10, 10), 1, 150) for samples in sample_of_each_clients]
-    # Plot each client's data size per class for each round, separated by client
-    draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
-    # 顯示每一輪資料量消耗的圖
-    draw_data_consumption(num_rounds, list_of_data_sizes)
-    # 顯示每個label的資料消耗圖
-    draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset)
-    # 每個client累積拿到的indices
-    cumu = [[] for _ in range(num_clients)]
-    for round_idx in range(num_rounds):
-        for client_idx in range(num_clients):
-            cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
-            loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
-            list_of_dataLoaders[round_idx][client_idx] = loader
-    # print(list_of_data_sizes)
-
-    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num, round_idx_increment
-
-def CIFAR10_test():
-    """
-    測試分佈漂移
-    :return: dataLoader
-    """
-    # 加載 CIFAR-10 數據集
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-    return DataLoader(testset, batch_size=testset.data.shape[0], shuffle=False)
-
-def distribution_shifting_CIFAR100_training(alpha: float = 1, num_clients: int = 10, num_rounds: int = 1000, batch_size: int = 64 , strength: float = 1e2, epsilon: float = 1e-8, rescue_ratio: float = 0.05):
-    """
-    使用 Dirichlet 分配生成分佈
-    :param alpha: Dirichlet 分配的參數
-    :param num_clients: 客戶端數量
-    :param num_rounds: 輪數
-    :param batch_size: 批次大小
-    :param strength: 分佈強度
-    :param epsilon: 最小值
-    :param rescue_ratio: 救援比例
-    :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
-    """
-    transform = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-    ])
-    trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-    train_pool = defaultdict(list)
-    for idx, (image, label) in enumerate(trainset):
-        train_pool[label].append(idx)
-    # 初始資料量
-    sample_of_each_clients = [np.random.randint(1, 50) for _ in range(num_clients)]
-    # 初始資料分布
-    init_proportions = np.random.dirichlet([alpha] * len(trainset.classes), num_clients)
-    # 每一輪每個client拿到的資料
-    client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的dataLoader
-    list_of_dataLoaders = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的資料量
-    list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的資料分布
-    list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client每個class的資料量
-    list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 確保每個client擁有第client個label的資料
-    for client_idx in range(num_clients):
-        if len(train_pool[client_idx]) > 0:
-            selected_indices = np.random.choice(train_pool[client_idx], size=min(len(train_pool[client_idx]), 1), replace=False)
-            client_get_indices[0][client_idx].extend(selected_indices)
-            list_of_client_indices_num[0][client_idx][client_idx] += len(selected_indices)
-            train_pool[client_idx] = [idx for idx in train_pool[client_idx] if idx not in selected_indices]
-            list_of_data_sizes[0][client_idx] += len(selected_indices)
-
-    new_proportions = init_proportions.copy()
-    all_distributions = [init_proportions]
-    for round_idx in range(num_rounds):
-        # print(f"Round {round_idx}, {new_proportions}")
-        for client_idx in range(num_clients):
-            for class_idx in range(len(trainset.classes)):
-                # 隨機選擇資料
-                if len(train_pool[class_idx]) > 0:
-                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*new_proportions[client_idx][class_idx]))
-                    selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
-                    client_get_indices[round_idx][client_idx].extend(selected_indices)
-                    # 紀錄這一輪這個client在這個class的資料量
-                    list_of_client_indices_num[round_idx][client_idx][class_idx] += avail_data_size
-                    # 更新data pool
-                    train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
-                    # 紀錄這一輪的資料量
-                    list_of_data_sizes[round_idx][client_idx] += avail_data_size
-            # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(new_proportions[client_idx])
-        # 資料量更新
-        sample_of_each_clients = [np.clip(samples + np.random.randint(-10, 10), 1, 200) for samples in sample_of_each_clients]
-        # 資料分布更新
-        new_proportions = (1 - rescue_ratio) * new_proportions + rescue_ratio * init_proportions
-        new_proportions = new_proportions * strength
-        new_proportions = np.clip(new_proportions, epsilon, None)
-        new_proportions = np.array([np.random.dirichlet(a) for a in new_proportions])
-        
-        # print("proportions:", new_proportions[0])
-        all_distributions.append(new_proportions)
-    # Plot each client's data size per class for each round, separated by client
-    draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
-    # 顯示每一輪資料量消耗的圖
-    draw_data_consumption(num_rounds, list_of_data_sizes)
-    # 顯示每個label的資料消耗圖
-    draw_label_consumption(num_clients, num_rounds, list_of_client_indices_num, trainset)
-    # 每個client累積拿到的indices
-    cumu = [[] for _ in range(num_clients)]
-    for round_idx in range(num_rounds):
-        for client_idx in range(num_clients):
-            cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
-            loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
-            list_of_dataLoaders[round_idx][client_idx] = loader
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
-
-    return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
-
-def CIFAR100_test():
-    """
-    測試分佈漂移
-    :return: dataLoader
-    """
-    # 加載 CIFAR-10 數據集
-    transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-])
-    testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
-    return DataLoader(testset, batch_size=100, shuffle=False)
-
-def distribution_shifting_CIFAR100_training_ver2(alpha: float = 0.1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64 , strength: float = 1e2, epsilon: float = 1e-8, rescue_ratio: float = 0.05):
-    """
-    使用 Dirichlet 分配生成分佈
-    :param alpha: Dirichlet 分配的參數
-    :param num_clients: 客戶端數量
-    :param num_rounds: 輪數
-    :param batch_size: 批次大小
-    :param strength: 分佈強度
-    :param epsilon: 最小值
-    :param rescue_ratio: 救援比例
-    :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
-    """
-    distribution_scale = 5
-    max_distribution_scale = distribution_scale + 4
-    rounds_to_get_new_data = 100
-    extra_label_ratio = 0.3
-    extra_label_num = 5
-
-    # 加載 CIFAR-100 數據集
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-
-    train_pool = defaultdict(list)
-    for idx, (image, label) in enumerate(trainset):
-        train_pool[label].append(idx)
-    data_size_list = [np.random.randint(10, pow(10, distribution_scale)) for _ in range(num_clients)]
-    data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-    # for round_idx in range(num_rounds):
-    #     new_round_random_rate = [np.random.uniform(0.9, 1.112) for _ in range(num_clients)]
-    #     data_size_list = [np.clip(data_size_list[i] * new_round_random_rate[i], 10, pow(10, max_distribution_scale)) for i in range(num_clients)]
-    #     data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-
-    # [num_clients * distribution_fusion_num]
-    # init_data_size_distribution_list = [np.random.dirichlet([data_size_alpha] * num_clients, distribution_fusion_num)]
-    # data_size_distribution_list = copy.deepcopy(init_data_size_distribution_list)
-    # print("Initial data size distribution list:", init_data_size_distribution_list)
-    # data_size_distribution = [0 for _ in range(num_clients)]
-    # for i in range(distribution_fusion_num):
-    #     data_size_distribution += data_size_distribution_list[i]
-    #     data_size_distribution_list[i] = (1 - size_rescue_ratio) * np.array(data_size_distribution_list[i]) + size_rescue_ratio * np.array(init_data_size_distribution_list[i])
-    #     data_size_distribution_list[i] = np.array(data_size_distribution_list[i]) * size_strength
-    #     data_size_distribution_list[i] = np.clip(data_size_distribution_list[i], size_epsilon, None)
-    #     data_size_distribution_list[i] = np.array([np.random.dirichlet(a) for a in data_size_distribution_list[i]])
-    #     print(data_size_distribution_list[i])
-    # data_size_distribution_list = np.array(data_size_distribution_list) / distribution_fusion_num
-    # print("Data size distribution list after fusion:", data_size_distribution_list)
-
-    # 第一輪的總資料量
-    total_samples_this_round = len(trainset.targets) / rounds_to_get_new_data
-    # 初始每個client的資料量
-    sample_of_each_clients = total_samples_this_round * np.array(data_size_distribution_list)
-    # 初始資料分布
-    init_proportions = np.random.dirichlet([alpha] * len(trainset.classes), num_clients)
-    # 每一輪每個client拿到的資料
-    client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的dataLoader
-    list_of_dataLoaders = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的資料量
-    list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client的資料分布
-    list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
-    # 每一輪每個client每個class的資料量
-    list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
-
-    for client_idx in range(num_clients):
-        if len(train_pool[client_idx]) > 0:
-            selected_indices = np.random.choice(train_pool[client_idx], size=min(len(train_pool[client_idx]), 1), replace=False)
-            client_get_indices[0][client_idx].extend(selected_indices)
-            list_of_client_indices_num[0][client_idx][client_idx] += len(selected_indices)
-            train_pool[client_idx] = [idx for idx in train_pool[client_idx] if idx not in selected_indices]
-            list_of_data_sizes[0][client_idx] += len(selected_indices)
-
-    new_proportions = init_proportions.copy()
-    cumu = [0 for _ in range(num_clients)]
-    all_distributions = [init_proportions]
-    flag = True
-    for round_idx in range(num_rounds):
-        # print("Round {} proportions: {}".format(round_idx, new_proportions[1]))
-        for client_idx in range(num_clients):
-            min_classes = max(1, int(len(trainset.classes) * extra_label_ratio))
-            # 先確保new_proportions[client_idx]排名最高的前20%的class每個都至少拿到一個sample
-            top_classes = np.argsort(new_proportions[client_idx])[::-1][:min_classes]
-            for class_idx in top_classes:
-                if len(train_pool[class_idx]) > 0:
-                    selected_indices = np.random.choice(train_pool[class_idx], size=min(extra_label_num, len(train_pool[class_idx])), replace=False)
-                    client_get_indices[round_idx][client_idx].extend(selected_indices)
-                    list_of_client_indices_num[round_idx][client_idx][class_idx] += extra_label_num
-                    train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
-                    list_of_data_sizes[round_idx][client_idx] += extra_label_num
-            # 再正常分配所有class
-            for class_idx in range(len(trainset.classes)):
-                # 隨機選擇資料
-                if len(train_pool[class_idx]) > 0:
-                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*new_proportions[client_idx][class_idx]))
-                    avail_data_size = avail_data_size - 1 if class_idx in top_classes and avail_data_size > 0 else avail_data_size
-                    selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
-                    client_get_indices[round_idx][client_idx].extend(selected_indices)
-                    # 紀錄這一輪這個client在這個class的資料量
-                    list_of_client_indices_num[round_idx][client_idx][class_idx] += avail_data_size
-                    # 更新data pool
-                    train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
-                    # 紀錄這一輪的資料量
-                    list_of_data_sizes[round_idx][client_idx] += avail_data_size
-            # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(new_proportions[client_idx])
         # 檢查資料是否用完
         remaining_data = sum([len(indices) for indices in train_pool.values()])
         if remaining_data == 0 and flag:
             record_end = round_idx
             flag = False
         # 總資料量更新
-        total_samples_this_round = np.clip(total_samples_this_round * np.random.uniform(0.9, 1.112),
-                                            len(trainset.targets) / rounds_to_get_new_data * 0.1, len(trainset.targets) / rounds_to_get_new_data * 10)
-        # 每個client的資料量更新
-        new_round_random_rate = [np.random.uniform(0.9, 1.112) for _ in range(num_clients)]
-        data_size_list = [np.clip(data_size_list[i] * new_round_random_rate[i], 10, pow(10, max_distribution_scale)) for i in range(num_clients)]
-        data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-        sample_of_each_clients = total_samples_this_round * np.array(data_size_distribution_list)
-        # 資料分布更新
-        new_proportions = (1 - rescue_ratio) * new_proportions + rescue_ratio * init_proportions
-        new_proportions = new_proportions * strength
-        new_proportions = np.clip(new_proportions, epsilon, None)
-        new_proportions = np.array([np.random.dirichlet(a) for a in new_proportions])
-        
-        # print("proportions:", new_proportions[0])
-        all_distributions.append(new_proportions)
+        total_samples_this_round = total_samples_this_round * (1 + np.random.uniform(-data_size_gain_ratio, data_size_gain_ratio))
+        total_samples_this_round = np.clip(total_samples_this_round,
+                            len(trainset.targets) / rounds_to_get_new_data * (1 - data_size_gain_ratio), 
+                            len(trainset.targets) / rounds_to_get_new_data * (1 + data_size_gain_ratio))
+        # 資料量分布更新
+        new_data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+        data_size_clients_proportions = new_data_size_distribution_weight * new_data_size_clients_proportions + (1 - new_data_size_distribution_weight) * data_size_clients_proportions
     # Plot each client's data size per class for each round, separated by client
     draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
     # 顯示每一輪資料量消耗的圖
@@ -435,67 +370,57 @@ def distribution_shifting_CIFAR100_training_ver2(alpha: float = 0.1, num_clients
                 print(f"Class {class_idx} has {len(indices)} samples remaining.")
     else:
         print("All data exhausted, last round:", record_end)
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
+    end_training_exclusive = record_end + 1 if record_end != -1 else num_rounds
+    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num, end_training_exclusive, round_idx_increment
 
-    return list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num
-
-def distribution_shifting_CIFAR100_training_ver3(alpha: float = 0.1, num_clients: int = 10, num_rounds: int = 400, batch_size: int = 64 , strength: float = 1e2, epsilon: float = 1e-8, rescue_ratio: float = 0.05):
+def distribution_shifting_class_increment_training(
+        trainset: torchvision.datasets.VisionDataset = None,
+        data_distribution_alpha: float = 1, 
+        num_clients: int = 10, 
+        num_rounds: int = 400, 
+        batch_size: int = 64,
+        new_distribution_weight: float = 0.1,
+        data_size_gain_ratio: float = 0.1,
+        new_data_size_distribution_weight: float = 0.5,
+        rounds_to_get_new_data: int = 100,
+        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+        start_class_num: int = 10,
+        increment_period: int = 1):
     """
-    使用 Dirichlet 分配生成分佈
-    :param alpha: Dirichlet 分配的參數
-    :param num_clients: 客戶端數量
-    :param num_rounds: 輪數
-    :param batch_size: 批次大小
-    :param strength: 分佈強度
-    :param epsilon: 最小值
-    :param rescue_ratio: 救援比例
-    :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
+    分布轉移的 CIFAR-100 訓練資料分配
+    Args:
+        data_distribution_alpha (float): Dirichlet 分布的 alpha 參數，用於控制資料分布的多樣性
+        num_clients (int): 客戶端數量
+        num_rounds (int): 訓練輪數
+        batch_size (int): 每個客戶端的批次大小
+        new_distribution_weight (float): 新分布與舊分布的權重比例
+        data_size_gain_ratio (float): 資料量增長比例
+        new_data_size_distribution_weight (float): 新資料量分布與舊資料量分布的權重比例
+        rounds_to_get_new_data (int): 每多少輪獲取新的資料量分布
+        data_size_alphas (list[float]): 每個客戶端的資料量比例參數
+    Returns:
+        list_of_dataLoaders (list): 每輪每個客戶端的 DataLoader
+        list_of_data_sizes (list): 每輪每個客戶端的資料量
+        list_of_data_distributions (list): 每輪每個客戶端的資料分布
+        num_classes (int): 資料集的類別數
+        list_of_client_indices_num (list): 每輪每個客戶端每個類別的資料量
+        trainset: CIFAR-100 訓練集
     """
-    distribution_scale = 5
-    max_distribution_scale = distribution_scale + 4
-    rounds_to_get_new_data = 100
-    extra_label_ratio = 0.3
-    extra_label_num = 5
-
-    # 加載 CIFAR-100 數據集
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+    # 檢查 data_size_alphas 的長度是否與 num_clients 相符
+    if len(data_size_alphas) != num_clients:
+        raise ValueError(f"Length of data_size_alphas ({len(data_size_alphas)}) must match num_clients ({num_clients}).")
 
     train_pool = defaultdict(list)
     for idx, (image, label) in enumerate(trainset):
         train_pool[label].append(idx)
-    data_size_list = [np.random.randint(10, pow(10, distribution_scale)) for _ in range(num_clients)]
-    data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-    # for round_idx in range(num_rounds):
-    #     new_round_random_rate = [np.random.uniform(0.9, 1.112) for _ in range(num_clients)]
-    #     data_size_list = [np.clip(data_size_list[i] * new_round_random_rate[i], 10, pow(10, max_distribution_scale)) for i in range(num_clients)]
-    #     data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-
-    # [num_clients * distribution_fusion_num]
-    # init_data_size_distribution_list = [np.random.dirichlet([data_size_alpha] * num_clients, distribution_fusion_num)]
-    # data_size_distribution_list = copy.deepcopy(init_data_size_distribution_list)
-    # print("Initial data size distribution list:", init_data_size_distribution_list)
-    # data_size_distribution = [0 for _ in range(num_clients)]
-    # for i in range(distribution_fusion_num):
-    #     data_size_distribution += data_size_distribution_list[i]
-    #     data_size_distribution_list[i] = (1 - size_rescue_ratio) * np.array(data_size_distribution_list[i]) + size_rescue_ratio * np.array(init_data_size_distribution_list[i])
-    #     data_size_distribution_list[i] = np.array(data_size_distribution_list[i]) * size_strength
-    #     data_size_distribution_list[i] = np.clip(data_size_distribution_list[i], size_epsilon, None)
-    #     data_size_distribution_list[i] = np.array([np.random.dirichlet(a) for a in data_size_distribution_list[i]])
-    #     print(data_size_distribution_list[i])
-    # data_size_distribution_list = np.array(data_size_distribution_list) / distribution_fusion_num
-    # print("Data size distribution list after fusion:", data_size_distribution_list)
-
+    
     # 第一輪的總資料量
     total_samples_this_round = len(trainset.targets) / rounds_to_get_new_data
-    # 初始每個client的資料量
-    sample_of_each_clients = total_samples_this_round * np.array(data_size_distribution_list)
-    # 初始資料分布
-    init_proportions = np.random.dirichlet([alpha] * len(trainset.classes), num_clients)
+    # 第一輪每個client的資料量佔比 [num_clients]
+    data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+    # 初始資料分布 [num_clients, num_classes]
+    data_distribution_clients_proportions = np.random.dirichlet([data_distribution_alpha] 
+                                                                * len(trainset.classes), num_clients)
     # 每一輪每個client拿到的資料
     client_get_indices = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client的dataLoader
@@ -506,38 +431,33 @@ def distribution_shifting_CIFAR100_training_ver3(alpha: float = 0.1, num_clients
     list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client每個class的資料量
     list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 紀錄新class進入的round index
+    round_idx_increment = []
+    cur_class_num = start_class_num
 
+    # 避免dataLoader為空
     for client_idx in range(num_clients):
-        if len(train_pool[client_idx]) > 0:
-            selected_indices = np.random.choice(train_pool[client_idx], size=min(len(train_pool[client_idx]), 1), replace=False)
+        random_class = np.random.choice(start_class_num, size=1, replace=False)[0]
+        if len(train_pool[random_class]) > 0:
+            selected_indices = np.random.choice(train_pool[random_class], size=min(len(train_pool[random_class]), 1), replace=False)
             client_get_indices[0][client_idx].extend(selected_indices)
-            list_of_client_indices_num[0][client_idx][client_idx] += len(selected_indices)
-            train_pool[client_idx] = [idx for idx in train_pool[client_idx] if idx not in selected_indices]
+            list_of_client_indices_num[0][client_idx][random_class] += len(selected_indices)
+            train_pool[random_class] = [idx for idx in train_pool[random_class] if idx not in selected_indices]
             list_of_data_sizes[0][client_idx] += len(selected_indices)
 
-    new_proportions = init_proportions.copy()
     cumu = [0 for _ in range(num_clients)]
-    all_distributions = [init_proportions]
+    all_distributions = [data_distribution_clients_proportions]
+    record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        # print("Round {} proportions: {}".format(round_idx, new_proportions[1]))
+        if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
+            cur_class_num += 1
+            round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
-            min_classes = max(1, int(len(trainset.classes) * extra_label_ratio))
-            # 先確保new_proportions[client_idx]排名最高的前20%的class每個都至少拿到一個sample
-            top_classes = np.argsort(new_proportions[client_idx])[::-1][:min_classes]
-            for class_idx in top_classes:
-                if len(train_pool[class_idx]) > 0:
-                    selected_indices = np.random.choice(train_pool[class_idx], size=min(extra_label_num, len(train_pool[class_idx])), replace=False)
-                    client_get_indices[round_idx][client_idx].extend(selected_indices)
-                    list_of_client_indices_num[round_idx][client_idx][class_idx] += extra_label_num
-                    train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
-                    list_of_data_sizes[round_idx][client_idx] += extra_label_num
-            # 再正常分配所有class
-            for class_idx in range(len(trainset.classes)):
+            for class_idx in range(cur_class_num):
                 # 隨機選擇資料
                 if len(train_pool[class_idx]) > 0:
-                    avail_data_size = min(len(train_pool[class_idx]), round(sample_of_each_clients[client_idx]*new_proportions[client_idx][class_idx]))
-                    avail_data_size = avail_data_size - 1 if class_idx in top_classes and avail_data_size > 0 else avail_data_size
+                    avail_data_size = min(len(train_pool[class_idx]), round(total_samples_this_round*data_size_clients_proportions[client_idx]*data_distribution_clients_proportions[client_idx][class_idx]))
                     selected_indices = np.random.choice(train_pool[class_idx], size=avail_data_size, replace=False)
                     client_get_indices[round_idx][client_idx].extend(selected_indices)
                     # 紀錄這一輪這個client在這個class的資料量
@@ -547,28 +467,25 @@ def distribution_shifting_CIFAR100_training_ver3(alpha: float = 0.1, num_clients
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
             # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(new_proportions[client_idx])
+            list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
         # 檢查資料是否用完
         remaining_data = sum([len(indices) for indices in train_pool.values()])
         if remaining_data == 0 and flag:
             record_end = round_idx
             flag = False
         # 總資料量更新
-        total_samples_this_round = np.clip(total_samples_this_round * np.random.uniform(0.9, 1.112),
-                                            len(trainset.targets) / rounds_to_get_new_data * 0.1, len(trainset.targets) / rounds_to_get_new_data * 10)
-        # 每個client的資料量更新
-        new_round_random_rate = [np.random.uniform(0.9, 1.112) for _ in range(num_clients)]
-        data_size_list = [np.clip(data_size_list[i] * new_round_random_rate[i], 10, pow(10, max_distribution_scale)) for i in range(num_clients)]
-        data_size_distribution_list = [data_size_list[i] / sum(data_size_list) for i in range(num_clients)]
-        sample_of_each_clients = total_samples_this_round * np.array(data_size_distribution_list)
+        total_samples_this_round = total_samples_this_round * (1 + np.random.uniform(-data_size_gain_ratio, data_size_gain_ratio))
+        total_samples_this_round = np.clip(total_samples_this_round,
+                            len(trainset.targets) / rounds_to_get_new_data * (1 - data_size_gain_ratio), 
+                            len(trainset.targets) / rounds_to_get_new_data * (1 + data_size_gain_ratio))
+        # 資料量分布更新
+        new_data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
+        data_size_clients_proportions = new_data_size_distribution_weight * new_data_size_clients_proportions + (1 - new_data_size_distribution_weight) * data_size_clients_proportions
         # 資料分布更新
-        new_proportions = (1 - rescue_ratio) * new_proportions + rescue_ratio * init_proportions
-        new_proportions = new_proportions * strength
-        new_proportions = np.clip(new_proportions, epsilon, None)
-        new_proportions = np.array([np.random.dirichlet(a) for a in new_proportions])
+        new_proportions = np.random.dirichlet([data_distribution_alpha] * len(trainset.classes), num_clients)
+        data_distribution_clients_proportions = new_distribution_weight * new_proportions + (1 - new_distribution_weight) * data_distribution_clients_proportions
         
-        # print("proportions:", new_proportions[0])
-        all_distributions.append(new_proportions)
+        all_distributions.append(data_distribution_clients_proportions)
     # Plot each client's data size per class for each round, separated by client
     draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
     # 顯示每一輪資料量消耗的圖
@@ -583,13 +500,11 @@ def distribution_shifting_CIFAR100_training_ver3(alpha: float = 0.1, num_clients
     
     # 每個client累積拿到的indices
     cumu = [[] for _ in range(num_clients)]
-    client_train_indices_each_round = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     for round_idx in range(num_rounds):
         for client_idx in range(num_clients):
             cumu[client_idx].extend(client_get_indices[round_idx][client_idx])
-            client_train_indices_each_round[round_idx][client_idx] = list(cumu[client_idx])
-            # loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
-            # list_of_dataLoaders[round_idx][client_idx] = loader
+            loader = DataLoader(Subset(trainset, list(cumu[client_idx])), batch_size=batch_size, shuffle=True)
+            list_of_dataLoaders[round_idx][client_idx] = loader
     # 檢查資料是否用完
     remaining_data = sum([len(indices) for indices in train_pool.values()])
     if remaining_data != 0:
@@ -599,15 +514,26 @@ def distribution_shifting_CIFAR100_training_ver3(alpha: float = 0.1, num_clients
                 print(f"Class {class_idx} has {len(indices)} samples remaining.")
     else:
         print("All data exhausted, last round:", record_end)
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
-
-    return client_train_indices_each_round, list_of_data_sizes, list_of_data_distributions, len(trainset.classes), list_of_client_indices_num, trainset
+    end_training_exclusive = record_end + 1 if record_end != -1 else num_rounds
+    return list_of_dataLoaders, list_of_data_sizes, len(trainset.classes), list_of_client_indices_num, end_training_exclusive, round_idx_increment
 
 if __name__ == "__main__":
-    # distribution_shifting_CIFAR10_training(num_rounds=400)
-    # CIFAR10_test()
-    # class_incremental_CIFAR10_training(num_rounds=500)
-    # distribution_shifting_CIFAR100_training()
-    distribution_shifting_CIFAR100_training_ver2(num_rounds=250)
+    # Example usage
+    train_loaders, data_sizes, num_classes, client_indices_num, end_rounds, round_idx_increment = get_training_data(
+        trainset="CIFAR10",
+        distribution_shifting=True,
+        class_increment=True,
+        data_distribution_alpha=0.5,
+        num_clients=10,
+        num_rounds=400,
+        batch_size=64,
+        new_distribution_weight=0.1,
+        data_size_gain_ratio=0.1,
+        new_data_size_distribution_weight=0.5,
+        rounds_to_get_new_data=100,
+        data_size_alphas=[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+        start_class_num=5,
+        increment_period=20
+    )
+    print("Training data prepared.")
 

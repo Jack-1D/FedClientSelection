@@ -90,7 +90,7 @@ def draw_client_data_size(num_clients, num_rounds, list_of_data_sizes):
 
 def draw_cumulative_data_size(num_clients, num_rounds, list_of_data_sizes):
     """
-    Draw cumulative data size for each client over rounds.
+    Draw cumulative data size for each client over rounds, marking the highest point for each line.
     :param num_clients: Number of clients
     :param num_rounds: Number of rounds
     :param list_of_data_sizes: List of data sizes for each round
@@ -98,7 +98,12 @@ def draw_cumulative_data_size(num_clients, num_rounds, list_of_data_sizes):
     cumulative_data_sizes = [[sum(list_of_data_sizes[r][client_idx] for r in range(round_idx + 1)) for client_idx in range(num_clients)] for round_idx in range(num_rounds)]
     plt.figure(figsize=(12, 6))
     for client_idx in range(num_clients):
-        plt.plot(range(num_rounds), [cumulative_data_sizes[round_idx][client_idx] for round_idx in range(num_rounds)], label=f'Client {client_idx}')
+        client_cumulative_sizes = [cumulative_data_sizes[round_idx][client_idx] for round_idx in range(num_rounds)]
+        plt.plot(range(num_rounds), client_cumulative_sizes, label=f'Client {client_idx}')
+        # Mark the highest point
+        max_value = max(client_cumulative_sizes)
+        max_index = client_cumulative_sizes.index(max_value)
+        plt.text(max_index, max_value, f'{max_value:.2f}', fontsize=8, ha='center', va='bottom')
     plt.xlabel('Round')
     plt.ylabel('Cumulative Data Size')
     plt.title('Cumulative Data Size per Client per Round')
