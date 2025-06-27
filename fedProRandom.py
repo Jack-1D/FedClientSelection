@@ -112,8 +112,8 @@ def fedProRandom(args, model_type):
 
         accuracy, loss = Server.test_model(testloader)
         accuracies.append(accuracy)
-        print(f"Round {round + 1}/{args.num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
-        logging.info(f"Round {round + 1}/{args.num_rounds}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
+        print(f"Round {round + 1}/{end_training_exclusive}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
+        logging.info(f"Round {round + 1}/{end_training_exclusive}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
         if round % 10 == 0:
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             Server.save_model(cur_model_path)
@@ -133,7 +133,7 @@ def fedProRandom(args, model_type):
     Server.save_model(final_model_path)
 
     draw_client_selected_times(args.num_clients, client_selection_counts)
-    draw_accuracy(args.num_rounds, accuracies, args.data_distribution_alpha)
+    draw_accuracy(end_training_exclusive, accuracies, args.data_distribution_alpha)
 
     # 示例：加載最終模型並測試
     Server.load_model(final_model_path)
