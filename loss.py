@@ -36,13 +36,14 @@ def compute_kl_divergence(model1, model2, data_loader, device):
     
     return kl_div / total_samples if total_samples > 0 else float('inf')
 
-def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader):
+def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader, alpha=0.5):
     """
-    計算客戶端的 CS Score
+    計算客戶端的 CS Score，結合 extractor 和 predictor 的 cosine similarity
     :param model_type: 客戶端模型類型
     :param global_model: 全局模型
     :param local_state_dict: 客戶端模型的狀態字典
     :param dataLoader: 客戶端數據加載器
+    :param alpha: 合併 extractor 和 predictor 的權重超參數
     :return: CS Score
     """
     local_model = copy.deepcopy(model_type)
@@ -57,20 +58,33 @@ def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader
     with torch.no_grad():
         for data, _ in dataLoader:
             data = data.to(device)
+            
+            # Extractor feature maps
             global_feature_map = global_model.extractor(data)
             local_feature_map = local_model.extractor(data)
-
             global_feature_map_flat = global_feature_map.view(global_feature_map.size(0), -1)
             local_feature_map_flat = local_feature_map.view(local_feature_map.size(0), -1)
-
-            # 計算每個 sample 的 cosine similarity -> shape: [B]
-            sim = F.cosine_similarity(global_feature_map_flat, local_feature_map_flat, dim=1)
-            total_cs += sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
+            
+            # Predictor outputs
+            global_predictor_output = global_model.predictor(global_feature_map_flat)
+            local_predictor_output = local_model.predictor(local_feature_map_flat)
+            
+            # Cosine similarity for extractor
+            extractor_sim = F.cosine_similarity(global_feature_map_flat, local_feature_map_flat, dim=1)
+            
+            # Cosine similarity for predictor
+            predictor_sim = F.cosine_similarity(global_predictor_output, local_predictor_output, dim=1)
+            
+            # Combine extractor and predictor similarity using alpha
+            combined_sim = alpha * extractor_sim + (1 - alpha) * predictor_sim
+            
+            total_cs += combined_sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
 
     avg_cs_score = total_cs / len(dataLoader.dataset)
 
     del local_model
     del global_feature_map, local_feature_map, global_feature_map_flat, local_feature_map_flat
+    del global_predictor_output, local_predictor_output
     torch.cuda.empty_cache()
     global_model.cpu()
 

@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from loss import client_count_cs_score, normalized_shannon_entropy
 
 class FLClient:
-    def __init__(self, model_type, data_loader, total_class, num_clients):
+    def __init__(self, model_type, data_loader, total_class, num_clients, lr=0.01, momentum=0.9, weight_decay=5e-4):
         self.model_type = model_type
         self.total_class = total_class
         self.num_clients = num_clients
@@ -30,46 +30,51 @@ class FLClient:
         # 紀錄從頭到前一次signal每個class的資料累積
         self.label_size_to_last_signal = [0 for _ in range(total_class)]
         self._cs = 0.0
+        self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
     @property
     def cs(self):
         return self._cs
 
-    def client_update(self, round, epochs=5, lr=0.01):
+    def client_update(self, round, epochs=5, lr = 0.01):
         self.model = self.model.to(self.device)
         self.model.train()
-        optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
-        # optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-        # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+        # 更新 learning rate
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
         criterion = nn.CrossEntropyLoss()
         scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
+        print(f"Learning rate: {self.optimizer.param_groups[0]['lr']}")
         for epoch in range(epochs):
             for data, target in self.data_loader[round]:
                 data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 if scaler:
                     with torch.amp.autocast("cuda"):
                         output = self.model(data)
                         loss = criterion(output, target)
                     scaler.scale(loss).backward()
-                    scaler.step(optimizer)
+                    scaler.step(self.optimizer)
                     scaler.update()
                 else:
                     output = self.model(data)
                     loss = criterion(output, target)
                     loss.backward()
-                    optimizer.step()
+                    self.optimizer.step()
 
-            # scheduler.step()
             del data, target, output, loss
             torch.cuda.empty_cache()
         self.model = self.model.to("cpu")
         torch.cuda.empty_cache()
 
-    def receive_model(self, global_model_state_dict):
+    def receive_model(self, global_model_state_dict, global_optimizer_state_dict):
         self.global_model_replica.load_state_dict(global_model_state_dict)
         self.model = copy.deepcopy(self.global_model_replica)
-        # self.model.load_state_dict(global_model_state_dict)
+        # 同步 optimizer 狀態，避免 momentum buffer 失效
+        if global_optimizer_state_dict is not None:
+            # 重新建立optimizer，避免GradScaler追蹤不到
+            self.optimizer = optim.SGD(self.model.parameters(), lr=self.optimizer.param_groups[0]['lr'], momentum=self.optimizer.param_groups[0]['momentum'], weight_decay=self.optimizer.param_groups[0]['weight_decay'])
+            self.optimizer.load_state_dict(global_optimizer_state_dict)
 
     def compute_cs_score(self, round):
         self._cs = client_count_cs_score(self.model_type, self.global_model_replica, self.model.state_dict(), self.data_loader[round])

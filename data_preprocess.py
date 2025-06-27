@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.data import Subset
 from collections import defaultdict
 from torch.utils.data import DataLoader
+from typing import List
 from drawer import *
 
 def get_training_data(trainset: str = "CIFAR10", 
@@ -17,7 +18,7 @@ def get_training_data(trainset: str = "CIFAR10",
                       data_size_gain_ratio: float = 0.1, 
                       new_data_size_distribution_weight: float = 0.5,
                       rounds_to_get_new_data: int = 100,
-                      data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+                      data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
                       start_class_num: int = 5,
                       increment_period: int = 20,
                       random_seed: int = 42):
@@ -35,6 +36,8 @@ def get_training_data(trainset: str = "CIFAR10",
     """
     np.random.seed(random_seed)
     transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
@@ -113,7 +116,7 @@ def distribution_shifting_training(
         data_size_gain_ratio: float = 0.1,
         new_data_size_distribution_weight: float = 0.5,
         rounds_to_get_new_data: int = 100,
-        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]):
+        data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]):
     """
     分布轉移的 CIFAR-100 訓練資料分配
     Args:
@@ -249,7 +252,7 @@ def class_increment_training(
         data_size_gain_ratio: float = 0.1,
         new_data_size_distribution_weight: float = 0.5,
         rounds_to_get_new_data: int = 100,
-        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+        data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
         start_class_num: int = 10,
         increment_period: int = 1):
     """
@@ -383,7 +386,7 @@ def distribution_shifting_class_increment_training(
         data_size_gain_ratio: float = 0.1,
         new_data_size_distribution_weight: float = 0.5,
         rounds_to_get_new_data: int = 100,
-        data_size_alphas: list[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
+        data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
         start_class_num: int = 10,
         increment_period: int = 1):
     """

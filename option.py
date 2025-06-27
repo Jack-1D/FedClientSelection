@@ -31,6 +31,8 @@ def args_parser():
     parser.add_argument("--cs_threshold", type=float, default=0.5, help="cosine similarity threshold for client selection")
     parser.add_argument("--kl_threshold", type=float, default=0.01, help="KL divergence threshold for client selection")
     parser.add_argument("--kl_epsilon", type=float, default=1e-10, help="Epsilon for KL divergence calculation")
+    parser.add_argument("--momentum", type=float, default=0.9, help="Momentum for local SGD optimizer")
+    parser.add_argument("--weight_decay", type=float, default=5e-4, help="Weight decay for local SGD optimizer")
     parser.add_argument("--log_file", type=str, default="Log10.log", help="Log file name")
     args = parser.parse_args()
     args.data_size_alphas = ast.literal_eval(args.data_size_alphas)
