@@ -89,16 +89,54 @@ def get_training_data(trainset: str = "CIFAR10",
 
 def get_test_data(testset: str = "CIFAR10",
                   batch_size: int = 128,
-                  random_seed: int = 42):
+                  random_seed: int = 42,
+                  class_increment: bool = False,
+                  num_rounds: int = 400,
+                  start_class_num: int = 5,
+                  round_idx_increment: List[int] = []):
     np.random.seed(random_seed)
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
     if testset == "CIFAR10":
-        testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+        if class_increment:
+            test_pool = defaultdict(list)
+            for idx, (image, label) in enumerate(torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)):
+                test_pool[label].append(idx)
+
+            list_of_test_loaders = []
+            cur_class_num = start_class_num
+
+            for round_idx in range(num_rounds):
+                test_indices = []
+                if round_idx in round_idx_increment and cur_class_num < len(test_pool):
+                    cur_class_num += 1
+                for class_idx in range(cur_class_num):
+                    test_indices.extend(test_pool[class_idx])
+                list_of_test_loaders.append(DataLoader(Subset(torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform), test_indices), batch_size=batch_size, shuffle=False))
+            return list_of_test_loaders
+        else:
+            return [torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform) for _ in range(num_rounds)]
     elif testset == "CIFAR100":
-        testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+        if class_increment:
+            test_pool = defaultdict(list)
+            for idx, (image, label) in enumerate(torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)):
+                test_pool[label].append(idx)
+
+            list_of_test_loaders = []
+            cur_class_num = start_class_num
+
+            for round_idx in range(num_rounds):
+                test_indices = []
+                if round_idx in round_idx_increment and cur_class_num < len(test_pool):
+                    cur_class_num += 1
+                for class_idx in range(cur_class_num):
+                    test_indices.extend(test_pool[class_idx])
+                list_of_test_loaders.append(DataLoader(Subset(torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform), test_indices), batch_size=batch_size, shuffle=False))
+            return list_of_test_loaders
+        else:
+            return [torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform) for _ in range(num_rounds)]
     else:
         raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
     
@@ -316,7 +354,7 @@ def class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
+        if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
             cur_class_num += 1
             round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
@@ -453,7 +491,7 @@ def distribution_shifting_class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if (round_idx + 1) % increment_period == 0 and cur_class_num < len(trainset.classes):
+        if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
             cur_class_num += 1
             round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
