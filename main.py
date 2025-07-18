@@ -7,8 +7,6 @@ from option import args_parser
 from set_seed import set_seed
 from fedPro import fedPro
 from fedProRandom import fedProRandom
-from topDataSize import topDataSize
-from allDataSizeWeight import allDataSizeWeight
 
 
 args = args_parser()
@@ -27,9 +25,5 @@ if __name__ == "__main__":
         fedPro(args, model_type)
     elif args.method == "random":
         fedProRandom(args, model_type)
-    elif args.method == "topDataSize":
-        topDataSize(args, model_type)
-    elif args.method == "allDataSizeWeight":
-        allDataSizeWeight(args, model_type)
     else:
         raise ValueError(f"Method {args.method} is not supported. Please choose 'proposed' or 'random'.")

@@ -30,42 +30,80 @@ class FLClient:
         # 紀錄從頭到前一次signal每個class的資料累積
         self.label_size_to_last_signal = [0 for _ in range(total_class)]
         self._cs = 0.0
+        self.avg_train_loss = 0.0
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
     @property
     def cs(self):
         return self._cs
 
-    def client_update(self, round, epochs=5, lr = 0.01):
+    def client_update(self, round, epochs=5, lr=0.01, lambda_kd=0.5, temperature=4.0):
         self.model = self.model.to(self.device)
+        self.global_model_replica = self.global_model_replica.to(self.device)
         self.model.train()
+        self.global_model_replica.eval()
         # 更新 learning rate
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = lr
-        criterion = nn.CrossEntropyLoss()
-        scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
+        criterion_ce = nn.CrossEntropyLoss()
+        criterion_kd = nn.KLDivLoss(reduction='batchmean')
+        scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
         print(f"Learning rate: {self.optimizer.param_groups[0]['lr']}")
+        total_loss = 0.0
+        total_samples = len(self.data_loader[round].dataset)
         for epoch in range(epochs):
             for data, target in self.data_loader[round]:
                 data, target = data.to(self.device, non_blocking=True), target.to(self.device, non_blocking=True)
                 self.optimizer.zero_grad()
                 if scaler:
                     with torch.amp.autocast("cuda"):
-                        output = self.model(data)
-                        loss = criterion(output, target)
+                        # Local model output
+                        local_output = self.model(data)
+                        # Global model output (teacher)
+                        with torch.no_grad():
+                            global_output = self.global_model_replica(data)
+                        
+                        # Cross-entropy loss
+                        loss_ce = criterion_ce(local_output, target)
+                        
+                        # Knowledge distillation loss
+                        local_logits_soft = F.log_softmax(local_output / temperature, dim=1)
+                        global_logits_soft = F.softmax(global_output / temperature, dim=1)
+                        loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
+                        
+                        # Total loss
+                        loss = loss_ce + lambda_kd * loss_kd
                     scaler.scale(loss).backward()
                     scaler.step(self.optimizer)
                     scaler.update()
                 else:
-                    output = self.model(data)
-                    loss = criterion(output, target)
+                    # Local model output
+                    local_output = self.model(data)
+                    # Global model output (teacher)
+                    with torch.no_grad():
+                        global_output = self.global_model_replica(data)
+                    
+                    # Cross-entropy loss
+                    loss_ce = criterion_ce(local_output, target)
+                    
+                    # Knowledge distillation loss
+                    local_logits_soft = F.log_softmax(local_output / temperature, dim=1)
+                    global_logits_soft = F.softmax(global_output / temperature, dim=1)
+                    loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
+                    
+                    # Total loss
+                    loss = loss_ce + lambda_kd * loss_kd
                     loss.backward()
                     self.optimizer.step()
+                total_loss += loss.item() * data.size(0)
 
-            del data, target, output, loss
+            del data, target, local_output, global_output, loss
             torch.cuda.empty_cache()
         self.model = self.model.to("cpu")
+        self.global_model_replica = self.global_model_replica.to("cpu")
         torch.cuda.empty_cache()
+        self.avg_train_loss = total_loss / total_samples if total_samples > 0 and not np.isnan(total_loss) else 0.0
+        
 
     def receive_model(self, global_model_state_dict, global_optimizer_state_dict):
         self.global_model_replica.load_state_dict(global_model_state_dict)
@@ -127,14 +165,14 @@ class FLClient:
         return False
         
 
-    def check_signal(self, client_idx, selected_clients, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
-        if round in round_idx_increment or (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
-        # if (client_idx in selected_clients and self.check_cs_signal(cs_threshold)) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+    def check_signal(self, client_idx, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
+        # if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
+        if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal):
             print(f"Client {client_idx}, signal:", 
                   f"new_class_incoming" if (round+1) in round_idx_increment else "",
                   f"cs={self._cs:.4f}" if (self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
-                  f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else ""
+                #   f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else ""
                 )
             return True
         return False

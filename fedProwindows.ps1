@@ -4,10 +4,11 @@ $arg = @(
     "--method", "proposed",
     "--model_type", "ResNet18",
     "--distribution_shifting",
-    "--data_distribution_alpha", "1",
+    "--class_increment",
+    "--data_distribution_alpha", "2",
     "--num_clients", "10",
-    "--num_rounds", "400",
-    "--batch_size", "64",
+    "--num_rounds", "600",
+    "--batch_size", "128",
     "--test_batch_size", "100",
     "--new_distribution_weight", "0.1",
     "--data_size_gain_ratio", "0.1",
@@ -15,21 +16,23 @@ $arg = @(
     "--rounds_to_get_new_data", "100",
     "--data_size_alphas", "`"[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]`"",
     "--start_class_num", "10",
-    "--increment_period", "1",
+    "--increment_period", "5",
     "--epochs_per_client", "2",
-    "--learning_rate", "0.01",
+    "--learning_rate", "1",
     "--participate_ratio", "0.8",
     "--random_seed", "42",
     "--alpha", "1",
     "--beta", "1",
     "--gamma", "1",
-    "--temperature", "0.5",
+    "--temperature", "0.2",
     "--cs_threshold", "0.5",
     "--kl_threshold", "0.01",
     "--kl_epsilon", "1e-10",
+    "--momentum", "0",
+    "--weight_decay", "0",
     "--log_file", "Log10.log"
 )
 Start-Process -FilePath "python" -ArgumentList $arg `
-  -RedirectStandardOutput "output.log" `
-  -RedirectStandardError "output_err.log" `
+  -RedirectStandardOutput "outputNewopt.log" `
+  -RedirectStandardError "outputNewopterr.log" `
   -WindowStyle Hidden

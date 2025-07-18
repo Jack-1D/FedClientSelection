@@ -26,20 +26,17 @@ def fedPro(args, model_type):
         increment_period=args.increment_period,
         random_seed=args.random_seed
     )
-    # print(total_class)
-    # print(round_idx_increment)
     print(list_of_client_indices_num)
-    testloader = get_test_data(
+    list_of_testloaders = get_test_data(
         testset=args.dataset,
         batch_size=args.test_batch_size,
-        random_seed=args.random_seed)
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
-    # for rounds in list_of_dataLoaders:
-    #     for client_idx, dataLoader in enumerate(rounds):
-    #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
+        random_seed=args.random_seed,
+        class_increment=args.class_increment,
+        num_rounds=args.num_rounds,
+        start_class_num=args.start_class_num,
+        round_idx_increment=round_idx_increment)
 
-    Server = FLServer(copy.deepcopy(model_type), total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+    Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
     Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]
 
@@ -61,7 +58,6 @@ def fedPro(args, model_type):
 
     # 聯邦學習訓練
     for round in range(args.num_rounds):
-        # selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
         # Print cumulative data size and cumulative data distribution for each client
         cumulative_data_sizes = [len(list_of_dataLoaders[i][round].dataset) for i in range(args.num_clients)]
         cumulative_data_distributions = [Clients[i].label_size_to_cur for i in range(args.num_clients)]
@@ -75,10 +71,6 @@ def fedPro(args, model_type):
         ]
         print(f"Cumulative data sizes: {cumulative_data_sizes}")
         print(f"KL Divergences from IID: {kl_divergences}")
-        # print(f"Selected clients for round {round + 1}: {selected_clients}")
-        # # 記錄每一輪選到的client
-        # for client_idx in selected_clients:
-        #     client_selection_counts[client_idx] += 1
 
         for client_idx in range(args.num_clients):
             # 更新data size
@@ -116,9 +108,10 @@ def fedPro(args, model_type):
         for client_idx in range(args.num_clients):
             Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, round_idx_increment, args.cs_threshold, round, last_signal, args.kl_threshold, args.kl_epsilon)
 
+        # client_losses = [Clients[i].avg_train_loss for i in range(args.num_clients)]
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature)
+            probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature, list_of_dataLoaders, round)
             Server.do_snapshot(Clients)
             print(f"Updated probabilities: {probabilities}")
             last_signal = round
@@ -129,11 +122,11 @@ def fedPro(args, model_type):
         for client_idx in selected_clients:
             client_selection_counts[client_idx] += 1
 
-        weights = [1.0 / 8.0 for _ in range(args.num_clients)]
+        weights = [1.0 / participate_client_num for _ in range(args.num_clients)]
         Server.server_aggregate(Clients, selected_clients, weights)
         # Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
 
-        accuracy, loss = Server.test_model(testloader)
+        accuracy, loss = Server.test_model(list_of_testloaders[round])
         accuracies.append(accuracy)
         print(f"Round {round + 1}/{end_training_exclusive}, Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")
         if round < end_training_exclusive:
@@ -155,5 +148,5 @@ def fedPro(args, model_type):
 
     # 示例：加載最終模型並測試
     Server.load_model(final_model_path)
-    accuracy, loss = Server.test_model(testloader)
+    accuracy, loss = Server.test_model(list_of_testloaders[-1])
     print(f"Loaded Model - Test Accuracy: {accuracy:.2f}%, Test Loss: {loss:.4f}")

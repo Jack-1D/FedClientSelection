@@ -3,9 +3,11 @@ import torch.nn as nn
 import os
 import torch.optim as optim
 from torch.nn import functional as F
+import numpy as np
 
 class FLServer:
-    def __init__(self, model_type, total_class, num_clients, num_rounds, lr, momentum=0.9, weight_decay=5e-4):
+    def __init__(self, model_type, list_of_testloaders, total_class, num_clients, num_rounds, lr, momentum=0.9, weight_decay=5e-4):
+        self.list_of_testloaders = list_of_testloaders
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -89,11 +91,11 @@ class FLServer:
         for client_idx in range(len(Clients)):
             self.clients_cs_score[client_idx], self.clients_label_size_from_last_signal_proportions[client_idx], self.clients_nse[client_idx] = Clients[client_idx].response_server_request()
         
-    def recompute_probabilities(self, alpha, beta, gamma, temperature):
+    def recompute_probabilities(self, alpha, beta, gamma, temperature, list_of_dataLoaders, round):
         print(self.clients_cs_score)
-        print(self.clients_label_size_from_last_signal_proportions)
-        print(self.clients_nse)
-        score = [(alpha * self.clients_cs_score[i] + beta * self.clients_label_size_from_last_signal_proportions[i] + gamma * self.clients_nse[i]) / (alpha + beta + gamma) for i in range(self.num_clients)]
+        print([len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)]) for i in range(self.num_clients)])
+        score = [(alpha * self.clients_cs_score[i] + beta * len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)]) + 0) / (alpha + beta) for i in range(self.num_clients)]
+        # score = [(alpha * self.clients_cs_score[i] + beta * len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)]) + gamma * self.clients_nse[i]) / (alpha + beta + gamma) for i in range(self.num_clients)]
         scaled_score = torch.tensor(score) / temperature
         probabilities = F.softmax(scaled_score, dim=0).numpy()
         return probabilities

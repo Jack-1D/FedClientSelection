@@ -8,7 +8,7 @@ def args_parser():
     parser.add_argument("--model_type", type=str, default="CNN", help="Type of model (e.g. CNN, ResNet18)")
     parser.add_argument("--distribution_shifting", action="store_true", help="Whether to use distribution shifting")
     parser.add_argument("--class_increment", action="store_true", help="Whether to use class increment")
-    parser.add_argument("--data_distribution_alpha", type=int, default=1, help="Dirichlet distribution alpha for client data distribution")
+    parser.add_argument("--data_distribution_alpha", type=float, default=1, help="Dirichlet distribution alpha for client data distribution")
     parser.add_argument("--num_clients", type=int, default=10, help="Number of clients")
     parser.add_argument("--num_rounds", type=int, default=400, help="Max number of global rounds (train until no more new data)")
     parser.add_argument("--batch_size", type=int, default=64, help="Local batch size")

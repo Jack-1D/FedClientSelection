@@ -100,9 +100,10 @@ def get_test_data(testset: str = "CIFAR10",
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
     if testset == "CIFAR10":
+        testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
         if class_increment:
             test_pool = defaultdict(list)
-            for idx, (image, label) in enumerate(torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)):
+            for idx, (image, label) in enumerate(testset):
                 test_pool[label].append(idx)
 
             list_of_test_loaders = []
@@ -114,14 +115,15 @@ def get_test_data(testset: str = "CIFAR10",
                     cur_class_num += 1
                 for class_idx in range(cur_class_num):
                     test_indices.extend(test_pool[class_idx])
-                list_of_test_loaders.append(DataLoader(Subset(torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform), test_indices), batch_size=batch_size, shuffle=False))
+                list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
             return list_of_test_loaders
         else:
-            return [torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform) for _ in range(num_rounds)]
+            return [DataLoader(testset, batch_size=batch_size, shuffle=False) for _ in range(num_rounds)]
     elif testset == "CIFAR100":
+        testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
         if class_increment:
             test_pool = defaultdict(list)
-            for idx, (image, label) in enumerate(torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)):
+            for idx, (image, label) in enumerate(testset):
                 test_pool[label].append(idx)
 
             list_of_test_loaders = []
@@ -133,14 +135,12 @@ def get_test_data(testset: str = "CIFAR10",
                     cur_class_num += 1
                 for class_idx in range(cur_class_num):
                     test_indices.extend(test_pool[class_idx])
-                list_of_test_loaders.append(DataLoader(Subset(torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform), test_indices), batch_size=batch_size, shuffle=False))
+                list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
             return list_of_test_loaders
         else:
-            return [torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform) for _ in range(num_rounds)]
+            return [DataLoader(testset, batch_size=batch_size, shuffle=False) for _ in range(num_rounds)]
     else:
         raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
-    
-    return DataLoader(testset, batch_size=batch_size, shuffle=False)
     
     
 
