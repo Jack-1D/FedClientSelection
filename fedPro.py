@@ -87,7 +87,7 @@ def fedPro(args, model_type):
         Server.send_model(Clients)
         # 每個client進行local training
         for client_idx in range(args.num_clients):
-            Clients[client_idx].client_update(round, epochs=args.epochs_per_client, lr=Server.get_lr())
+            Clients[client_idx].client_update(round, epochs=args.epochs_per_client, lr=Server.get_lr(), beta=args.beta, temperature=args.kl_temperature)
             # 每個被選到的client計算CS Score
             Clients[client_idx].compute_cs_score(round)
         print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(args.num_clients)]}")
@@ -111,7 +111,7 @@ def fedPro(args, model_type):
         # client_losses = [Clients[i].avg_train_loss for i in range(args.num_clients)]
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature, list_of_dataLoaders, round)
+            probabilities = Server.recompute_probabilities(args.alpha, args.softmax_temperature, list_of_dataLoaders, round)
             Server.do_snapshot(Clients)
             print(f"Updated probabilities: {probabilities}")
             last_signal = round

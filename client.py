@@ -31,13 +31,74 @@ class FLClient:
         self.label_size_to_last_signal = [0 for _ in range(total_class)]
         self._cs = 0.0
         self.avg_train_loss = 0.0
+        self.norm = 0.0
+        self.gradient = []  # Initialize gradient storage
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
     @property
     def cs(self):
         return self._cs
 
-    def client_update(self, round, epochs=5, lr=0.01, lambda_kd=0.5, temperature=4.0):
+    def get_update_norm(self):
+        return self.norm
+
+    def get_gradient_summary(self):
+        """
+        Returns gradient summary as a flattened 1D numpy array
+        使用模型的當前參數結構確保所有客戶端返回相同維度的梯度向量
+        """
+        # 使用模型參數結構作為基準，確保所有客戶端返回相同長度的向量
+        total_params = sum(p.numel() for p in self.model.parameters())
+        
+        if not self.gradient:
+            print(f"No gradient data available, returning zero vector of size {total_params}")
+            return np.zeros(total_params)
+        
+        # Average all gradients across batches
+        num_batches = len(self.gradient)
+        if num_batches == 0:
+            print(f"Empty gradient list, returning zero vector of size {total_params}")
+            return np.zeros(total_params)
+        
+        print(f"Processing {num_batches} batches of gradients")
+        
+        # 根據模型參數建立梯度向量，而不是依賴存儲的梯度
+        gradient_vector = np.zeros(total_params)
+        
+        if num_batches > 0 and len(self.gradient[0]) > 0:
+            # 取最後一個 batch 的梯度
+            last_gradients = self.gradient[-1]
+            
+            param_idx = 0
+            start_idx = 0
+            
+            for param, grad in zip(self.model.parameters(), last_gradients):
+                param_size = param.numel()
+                end_idx = start_idx + param_size
+                
+                try:
+                    # 確保梯度與參數形狀匹配
+                    if grad is not None and grad.shape == param.shape:
+                        flat_grad = grad.flatten().cpu().numpy()
+                        # 檢查並清理 NaN/Inf 值
+                        flat_grad = np.nan_to_num(flat_grad, nan=0.0, posinf=0.0, neginf=0.0)
+                        gradient_vector[start_idx:end_idx] = flat_grad
+                    else:
+                        print(f"Gradient mismatch for parameter {param_idx}: expected {param.shape}, got {grad.shape if grad is not None else None}")
+                        # 填充為零
+                        gradient_vector[start_idx:end_idx] = 0.0
+                        
+                except Exception as e:
+                    print(f"Error processing parameter {param_idx}: {e}")
+                    gradient_vector[start_idx:end_idx] = 0.0
+                
+                start_idx = end_idx
+                param_idx += 1
+        
+        print(f"Generated gradient vector with {len(gradient_vector)} parameters (expected: {total_params})")
+        return gradient_vector
+
+    def client_update(self, round, epochs=5, lr=0.01, beta=0.5, temperature=4.0):
         self.model = self.model.to(self.device)
         self.global_model_replica = self.global_model_replica.to(self.device)
         self.model.train()
@@ -49,6 +110,10 @@ class FLClient:
         criterion_kd = nn.KLDivLoss(reduction='batchmean')
         scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
         print(f"Learning rate: {self.optimizer.param_groups[0]['lr']}")
+        
+        # Clear previous gradients
+        self.gradient = []
+        
         total_loss = 0.0
         total_samples = len(self.data_loader[round].dataset)
         for epoch in range(epochs):
@@ -72,8 +137,14 @@ class FLClient:
                         loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
                         
                         # Total loss
-                        loss = loss_ce + lambda_kd * loss_kd
+                        loss = loss_ce + beta * loss_kd
                     scaler.scale(loss).backward()
+                    # Store gradients only in the last epoch
+                    if epoch == epochs - 1:
+                        self.gradient.append([
+                            param.grad.clone().detach().cpu() 
+                            for param in self.model.parameters() if param.grad is not None
+                        ])
                     scaler.step(self.optimizer)
                     scaler.update()
                 else:
@@ -92,8 +163,14 @@ class FLClient:
                     loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
                     
                     # Total loss
-                    loss = loss_ce + lambda_kd * loss_kd
+                    loss = beta * loss_ce + (1 - beta) * loss_kd
                     loss.backward()
+                    # Store gradients only in the last epoch
+                    if epoch == epochs - 1:
+                        self.gradient.append([
+                            param.grad.clone().detach().cpu() 
+                            for param in self.model.parameters() if param.grad is not None
+                        ])
                     self.optimizer.step()
                 total_loss += loss.item() * data.size(0)
 
@@ -103,6 +180,12 @@ class FLClient:
         self.global_model_replica = self.global_model_replica.to("cpu")
         torch.cuda.empty_cache()
         self.avg_train_loss = total_loss / total_samples if total_samples > 0 and not np.isnan(total_loss) else 0.0
+        self.norm = np.linalg.norm(
+            torch.cat([
+            (param1 - param2).view(-1) 
+            for param1, param2 in zip(self.global_model_replica.parameters(), self.model.parameters())
+            ]).detach().cpu().numpy()
+        )
         
 
     def receive_model(self, global_model_state_dict, global_optimizer_state_dict):

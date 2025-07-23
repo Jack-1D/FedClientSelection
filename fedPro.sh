@@ -23,10 +23,10 @@ nohup python3 -u main.py \
     --learning_rate 1 \
     --participate_ratio 0.8 \
     --random_seed 42 \
-    --alpha 1 \
-    --beta 1 \
-    --gamma 1 \
-    --temperature 0.2 \
+    --alpha 0.5 \
+    --beta 0.5 \
+    --softmax_temperature 0.08 \
+    --kl_temperature 4.0 \
     --cs_threshold 0.5 \
     --kl_threshold 0.01 \
     --kl_epsilon 1e-10 \
