@@ -7,6 +7,9 @@ from option import args_parser
 from set_seed import set_seed
 from fedPro import fedPro
 from fedProRandom import fedProRandom
+from PoC import PoC
+from OCS import OCS
+from PNCS import PNCS
 
 
 args = args_parser()
@@ -25,5 +28,11 @@ if __name__ == "__main__":
         fedPro(args, model_type)
     elif args.method == "random":
         fedProRandom(args, model_type)
+    elif args.method == "PoC":
+        PoC(args, model_type)
+    elif args.method == "OCS":
+        OCS(args, model_type)
+    elif args.method == "PNCS":
+        PNCS(args, model_type)
     else:
         raise ValueError(f"Method {args.method} is not supported. Please choose 'proposed' or 'random'.")
