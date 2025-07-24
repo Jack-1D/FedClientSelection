@@ -7,7 +7,7 @@ nohup python3 -u main.py \
     --model_type ResNet18 \
     --distribution_shifting \
     --class_increment \
-    --data_distribution_alpha 2 \
+    --data_distribution_alpha 2.0 \
     --num_clients 10 \
     --num_rounds 600 \
     --batch_size 128 \
@@ -23,7 +23,7 @@ nohup python3 -u main.py \
     --learning_rate 1 \
     --participate_ratio 0.8 \
     --random_seed 42 \
-    --alpha 0.5 \
+    --alpha 0.6666666 \
     --beta 0.5 \
     --softmax_temperature 0.08 \
     --kl_temperature 4.0 \

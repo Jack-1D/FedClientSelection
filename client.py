@@ -137,7 +137,7 @@ class FLClient:
                         loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
                         
                         # Total loss
-                        loss = loss_ce + beta * loss_kd
+                        loss = 1.5 * (beta * loss_ce + (1 - beta) * loss_kd)
                     scaler.scale(loss).backward()
                     # Store gradients only in the last epoch
                     if epoch == epochs - 1:
@@ -163,7 +163,7 @@ class FLClient:
                     loss_kd = criterion_kd(local_logits_soft, global_logits_soft) * (temperature ** 2)
                     
                     # Total loss
-                    loss = beta * loss_ce + (1 - beta) * loss_kd
+                    loss = 1.5 * (beta * loss_ce + (1 - beta) * loss_kd)
                     loss.backward()
                     # Store gradients only in the last epoch
                     if epoch == epochs - 1:
