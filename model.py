@@ -2,17 +2,19 @@ import torch.nn as nn
 import torch
 import math
 
-def get_model(model_type, random_seed=42):
+def get_model(model_type, num_classes=10, random_seed=42):
     torch.manual_seed(random_seed)
     if model_type == "CNN":
-        return CNN()
+        return CNN(num_classes=num_classes)
     elif model_type == "ResNet18":
-        return ResNet18()
+        return ResNet18(num_classes=num_classes)
+    elif model_type == "ResNet34":
+        return ResNet34(num_classes=num_classes)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
 class CNN(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes=10):
         super(CNN, self).__init__()
         self.extractor = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1),
@@ -36,17 +38,21 @@ class CNN(nn.Module):
             nn.Dropout(p=0.25)
         )
         
+        # 使用 AdaptiveAvgPool2d 來統一特徵圖尺寸
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((4, 4))
+        
         self.predictor = nn.Sequential(
             nn.Flatten(),
             nn.Linear(128 * 4 * 4, 512),
             nn.ReLU(),
-            nn.Linear(512, 10)
+            nn.Linear(512, num_classes)
             # 注意：移除Softmax，因為CrossEntropyLoss內部會處理
         )
         self.apply(self.init_weights)
 
     def forward(self, x):
         x = self.extractor(x)
+        x = self.adaptive_pool(x)  # 統一調整為 4x4 尺寸
         x = self.predictor(x)
         return x
     
@@ -190,7 +196,8 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.feature = nn.AvgPool2d(4, stride=1)
+        # self.feature = nn.AvgPool2d(4, stride=1)
+        self.feature = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
@@ -240,8 +247,8 @@ class ResNet(nn.Module):
         return x
 
 class ResNet18(ResNet):
-    def __init__(self, **kwargs):
-        super(ResNet18, self).__init__(BasicBlock, [2, 2, 2, 2], **kwargs)
+    def __init__(self, num_classes=10, **kwargs):
+        super(ResNet18, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=num_classes, **kwargs)
         # Initialize weight
         for m in self.modules():
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
@@ -251,4 +258,16 @@ class ResNet18(ResNet):
                 m.weight.data = m.weight.data.float()
                 if m.bias is not None:
                     m.bias.data = m.bias.data.float()
-        
+
+class ResNet34(ResNet):
+    def __init__(self, num_classes=10, **kwargs):
+        super(ResNet34, self).__init__(BasicBlock, [3, 4, 6, 3], num_classes=num_classes, **kwargs)
+        # Initialize weight
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
+                m.weight.data = m.weight.data.float()
+                if m.bias is not None:
+                    m.bias.data = m.bias.data.float()

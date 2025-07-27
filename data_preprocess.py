@@ -1,11 +1,115 @@
 import torchvision.transforms as transforms
 import torchvision
 import numpy as np
-from torch.utils.data import Subset
+from torch.utils.data import Subset, Dataset
 from collections import defaultdict
 from torch.utils.data import DataLoader
 from typing import List
 from drawer import *
+import os
+from PIL import Image
+
+class TinyImageNet(Dataset):
+    """TinyImageNet dataset implementation."""
+    
+    def __init__(self, root, train=True, transform=None, download=True):
+        self.root = root
+        self.train = train
+        self.transform = transform
+        
+        # TinyImageNet dataset structure
+        self.data_dir = os.path.join(root, 'tiny-imagenet-200')
+        
+        if download and not os.path.exists(self.data_dir):
+            self._download_and_extract()
+        
+        if train:
+            self._load_train_data()
+        else:
+            self._load_val_data()
+    
+    def _download_and_extract(self):
+        """Download and extract TinyImageNet dataset."""
+        import urllib.request
+        import zipfile
+        
+        os.makedirs(self.root, exist_ok=True)
+        
+        url = "http://cs231n.stanford.edu/tiny-imagenet-200.zip"
+        zip_path = os.path.join(self.root, "tiny-imagenet-200.zip")
+        
+        print("Downloading TinyImageNet...")
+        urllib.request.urlretrieve(url, zip_path)
+        
+        print("Extracting TinyImageNet...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(self.root)
+        
+        os.remove(zip_path)
+        print("TinyImageNet downloaded and extracted successfully!")
+    
+    def _load_train_data(self):
+        """Load training data."""
+        self.data = []
+        self.targets = []
+        
+        train_dir = os.path.join(self.data_dir, 'train')
+        
+        # Create class to index mapping
+        class_names = sorted(os.listdir(train_dir))
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(class_names)}
+        self.classes = class_names  # 添加 classes 屬性
+        
+        for class_name in class_names:
+            class_dir = os.path.join(train_dir, class_name, 'images')
+            if os.path.exists(class_dir):
+                for img_name in os.listdir(class_dir):
+                    if img_name.endswith('.JPEG'):
+                        img_path = os.path.join(class_dir, img_name)
+                        self.data.append(img_path)
+                        self.targets.append(self.class_to_idx[class_name])
+    
+    def _load_val_data(self):
+        """Load validation data."""
+        self.data = []
+        self.targets = []
+        
+        val_dir = os.path.join(self.data_dir, 'val')
+        
+        # Read val annotations
+        val_annotations_file = os.path.join(val_dir, 'val_annotations.txt')
+        
+        # Create class to index mapping from train directory
+        train_dir = os.path.join(self.data_dir, 'train')
+        class_names = sorted(os.listdir(train_dir))
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(class_names)}
+        self.classes = class_names  # 添加 classes 屬性
+        
+        with open(val_annotations_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                img_name = parts[0]
+                class_name = parts[1]
+                
+                img_path = os.path.join(val_dir, 'images', img_name)
+                if os.path.exists(img_path):
+                    self.data.append(img_path)
+                    self.targets.append(self.class_to_idx[class_name])
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        img_path = self.data[idx]
+        target = self.targets[idx]
+        
+        # Load image
+        image = Image.open(img_path).convert('RGB')
+        
+        if self.transform is not None:
+            image = self.transform(image)
+        
+        return image, target
 
 def get_training_data(trainset: str = "CIFAR10", 
                       distribution_shifting: bool = True,
@@ -35,18 +139,33 @@ def get_training_data(trainset: str = "CIFAR10",
     :return: list_of_dataLoaders, list_of_data_sizes, list_of_data_distributions, num_class, list_of_client_indices_num
     """
     np.random.seed(random_seed)
-    transform = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-    ])
+    
     if trainset == "CIFAR10":
+        transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        ])
         trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     elif trainset == "CIFAR100":
+        transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        ])
         trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+    elif trainset == "TinyImageNet":
+        transform = transforms.Compose([
+            transforms.RandomCrop(64, padding=8),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        trainset = TinyImageNet(root='./data', train=True, transform=transform, download=True)
     else:
-        raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', or 'TinyImageNet'.")
     
     if distribution_shifting and class_increment:
         return distribution_shifting_class_increment_training(trainset=trainset,
@@ -95,52 +214,46 @@ def get_test_data(testset: str = "CIFAR10",
                   start_class_num: int = 5,
                   round_idx_increment: List[int] = []):
     np.random.seed(random_seed)
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-    ])
+    
     if testset == "CIFAR10":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        ])
         testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-        if class_increment:
-            test_pool = defaultdict(list)
-            for idx, (image, label) in enumerate(testset):
-                test_pool[label].append(idx)
-
-            list_of_test_loaders = []
-            cur_class_num = start_class_num
-
-            for round_idx in range(num_rounds):
-                test_indices = []
-                if round_idx in round_idx_increment and cur_class_num < len(test_pool):
-                    cur_class_num += 1
-                for class_idx in range(cur_class_num):
-                    test_indices.extend(test_pool[class_idx])
-                list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
-            return list_of_test_loaders
-        else:
-            return [DataLoader(testset, batch_size=batch_size, shuffle=False) for _ in range(num_rounds)]
     elif testset == "CIFAR100":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        ])
         testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
-        if class_increment:
-            test_pool = defaultdict(list)
-            for idx, (image, label) in enumerate(testset):
-                test_pool[label].append(idx)
-
-            list_of_test_loaders = []
-            cur_class_num = start_class_num
-
-            for round_idx in range(num_rounds):
-                test_indices = []
-                if round_idx in round_idx_increment and cur_class_num < len(test_pool):
-                    cur_class_num += 1
-                for class_idx in range(cur_class_num):
-                    test_indices.extend(test_pool[class_idx])
-                list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
-            return list_of_test_loaders
-        else:
-            return [DataLoader(testset, batch_size=batch_size, shuffle=False) for _ in range(num_rounds)]
+    elif testset == "TinyImageNet":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        testset = TinyImageNet(root='./data', train=False, transform=transform, download=True)
     else:
-        raise ValueError("Unsupported dataset. Please choose 'CIFAR10' or 'CIFAR100'.")
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', or 'TinyImageNet'.")
+    
+    if class_increment:
+        test_pool = defaultdict(list)
+        for idx, (image, label) in enumerate(testset):
+            test_pool[label].append(idx)
+
+        list_of_test_loaders = []
+        cur_class_num = start_class_num
+
+        for round_idx in range(num_rounds):
+            test_indices = []
+            if round_idx in round_idx_increment and cur_class_num < len(test_pool):
+                cur_class_num += 1
+            for class_idx in range(cur_class_num):
+                test_indices.extend(test_pool[class_idx])
+            list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
+        return list_of_test_loaders
+    else:
+        return [DataLoader(testset, batch_size=batch_size, shuffle=False) for _ in range(num_rounds)]
     
     
 

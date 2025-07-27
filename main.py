@@ -16,7 +16,18 @@ args = args_parser()
 print("Arguments:")
 for arg, value in vars(args).items():
     print(f"{arg}: {value}")
-model_type = get_model(args.model_type, random_seed=args.random_seed)
+
+# 根據資料集設定類別數
+if args.dataset == "CIFAR10":
+    num_classes = 10
+elif args.dataset == "CIFAR100":
+    num_classes = 100
+elif args.dataset == "TinyImageNet":
+    num_classes = 200
+else:
+    raise ValueError(f"Unsupported dataset: {args.dataset}")
+
+model_type = get_model(args.model_type, num_classes=num_classes, random_seed=args.random_seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 set_seed(args)
