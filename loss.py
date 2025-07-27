@@ -88,7 +88,7 @@ def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader
     torch.cuda.empty_cache()
     global_model.cpu()
 
-    return avg_cs_score
+    return avg_cs_score if not np.isnan(avg_cs_score) else 1e-8
 
 def normalized_shannon_entropy(class_counts):
     """
