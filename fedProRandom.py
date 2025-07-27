@@ -26,8 +26,6 @@ def fedProRandom(args, model_type):
         increment_period=args.increment_period,
         random_seed=args.random_seed
     )
-    # print(total_class)
-    # print(round_idx_increment)
     print(list_of_client_indices_num)
     list_of_testloaders = get_test_data(
         testset=args.dataset,
@@ -37,13 +35,8 @@ def fedProRandom(args, model_type):
         num_rounds=args.num_rounds,
         start_class_num=args.start_class_num,
         round_idx_increment=round_idx_increment)
-    # print(list_of_data_sizes)
-    # print(list_of_data_distributions)
-    # for rounds in list_of_dataLoaders:
-    #     for client_idx, dataLoader in enumerate(rounds):
-    #         print(f"Client {client_idx} has {len(dataLoader.dataset)} samples.")
 
-    Server = FLServer(copy.deepcopy(model_type), total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+    Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
     Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]
 
@@ -65,7 +58,6 @@ def fedProRandom(args, model_type):
 
     # 聯邦學習訓練
     for round in range(args.num_rounds):
-        # selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
         # Print cumulative data size and cumulative data distribution for each client
         cumulative_data_sizes = [len(list_of_dataLoaders[i][round].dataset) for i in range(args.num_clients)]
         cumulative_data_distributions = [Clients[i].label_size_to_cur for i in range(args.num_clients)]
@@ -79,10 +71,6 @@ def fedProRandom(args, model_type):
         ]
         print(f"Cumulative data sizes: {cumulative_data_sizes}")
         print(f"KL Divergences from IID: {kl_divergences}")
-        # print(f"Selected clients for round {round + 1}: {selected_clients}")
-        # # 記錄每一輪選到的client
-        # for client_idx in selected_clients:
-        #     client_selection_counts[client_idx] += 1
 
         for client_idx in range(args.num_clients):
             # 更新data size
@@ -99,7 +87,7 @@ def fedProRandom(args, model_type):
         Server.send_model(Clients)
         # 每個client進行local training
         for client_idx in range(args.num_clients):
-            Clients[client_idx].client_update(round, epochs=args.epochs_per_client, lr=Server.get_lr())
+            Clients[client_idx].client_update(round, epochs=args.epochs_per_client, lr=Server.get_lr(), beta=args.beta, temperature=args.kl_temperature)
             # 每個被選到的client計算CS Score
             Clients[client_idx].compute_cs_score(round)
         print(f"CS Scores: {[f'{Clients[i].cs:.4f}' for i in range(args.num_clients)]}")
@@ -119,15 +107,14 @@ def fedProRandom(args, model_type):
 
         probabilities = [1.0 / args.num_clients for _ in range(args.num_clients)]
         selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
-
-        weights = [1.0 / participate_client_num for _ in range(args.num_clients)]
-        Server.server_aggregate(Clients, selected_clients, weights)
-        # Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
-
         print(f"Selected clients for round {round + 1}: {selected_clients}")
         # 記錄每一輪選到的client
         for client_idx in selected_clients:
             client_selection_counts[client_idx] += 1
+
+        weights = [1.0 / participate_client_num for _ in range(args.num_clients)]
+        Server.server_aggregate(Clients, selected_clients, weights)
+        # Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
 
         accuracy, loss = Server.test_model(list_of_testloaders[round])
         accuracies.append(accuracy)
@@ -140,17 +127,9 @@ def fedProRandom(args, model_type):
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             Server.save_model(cur_model_path)
 
-        # for client_idx in range(args.num_clients):
-        #     Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, selected_clients, round_idx_increment, args.cs_threshold, round, last_signal, args.kl_threshold, args.kl_epsilon)
+        
 
-        # if any(Server.signal_list):
-        #     Server.request_to_recompute_probabilities(Clients)
-        #     probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature)
-        #     Server.do_snapshot(Clients)
-        #     print(f"Updated probabilities: {probabilities}")
-        #     last_signal = round
-
-        # 保存最終模型
+    # 保存最終模型
     final_model_path = "checkpoints/global_model_final.pth"
     Server.save_model(final_model_path)
 
