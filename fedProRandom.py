@@ -127,7 +127,6 @@ def fedProRandom(args, model_type):
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             Server.save_model(cur_model_path)
 
-        
 
     # 保存最終模型
     final_model_path = "checkpoints/global_model_final.pth"

@@ -17,6 +17,13 @@ class FLServer:
         self.clients_cs_score = [0.0 for _ in range(num_clients)]
         self.clients_label_size_from_last_signal_proportions = [0.0 for _ in range(num_clients)]
         self.clients_nse = [0.0 for _ in range(num_clients)]
+        
+        # 保存初始參數用於恢復訓練
+        self.num_rounds = num_rounds
+        self.initial_lr = lr
+        self.momentum = momentum
+        self.weight_decay = weight_decay
+        
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_rounds)
 
@@ -115,3 +122,22 @@ class FLServer:
             print(f"Model loaded from {path}")
         else:
             print(f"No model found at {path}")
+    
+    def resume_training_from_round(self, resume_round):
+        """
+        從指定的輪數恢復訓練，調整學習率調度器狀態
+        """
+        if resume_round > 0:
+            print(f"Adjusting learning rate scheduler for resume from round {resume_round}")
+            
+            # 重新創建調度器並快進到指定輪數
+            self.optimizer = optim.SGD(self.model.parameters(), lr=self.initial_lr, 
+                                     momentum=self.momentum, weight_decay=self.weight_decay)
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.num_rounds)
+            
+            # 快進調度器到指定輪數
+            for _ in range(resume_round):
+                self.scheduler.step()
+            
+            current_lr = self.optimizer.param_groups[0]['lr']
+            print(f"Learning rate adjusted to: {current_lr:.6f} for round {resume_round}")

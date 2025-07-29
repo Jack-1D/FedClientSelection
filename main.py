@@ -10,6 +10,7 @@ from fedProRandom import fedProRandom
 from PoC import PoC
 from OCS import OCS
 from PNCS import PNCS
+from fedPromid import fedPromid
 
 
 args = args_parser()
@@ -45,5 +46,7 @@ if __name__ == "__main__":
         OCS(args, model_type)
     elif args.method == "PNCS":
         PNCS(args, model_type)
+    elif args.method == "fedPromid":
+        fedPromid(args, model_type)
     else:
         raise ValueError(f"Method {args.method} is not supported. Please choose 'proposed' or 'random'.")
