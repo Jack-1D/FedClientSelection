@@ -1,7 +1,7 @@
 $arg = @(
     "-u", "main.py",
     "--dataset", "TinyImageNet",
-    "--method", "fedPromid",
+    "--method", "proposed",
     "--model_type", "ResNet34",
     "--distribution_shifting",
     "--class_increment",
@@ -18,7 +18,8 @@ $arg = @(
                  4.8, 9.1, 6.3, 7.7, 5.9, 8.5, 3.9, 6.2, 4.4, 7.0, 
                  5.1, 8.8, 6.0, 7.2, 4.6, 9.3, 5.7, 8.0, 6.8, 7.5]`"",
     "--start_class_num", "20",
-    "--increment_period", "3",
+    "--increment_period", "5",
+    "--increment_class_num", "2",
     "--epochs_per_client", "2",
     "--learning_rate", "1",
     "--participate_ratio", "0.1",
@@ -32,8 +33,8 @@ $arg = @(
     "--kl_epsilon", "1e-10",
     "--momentum", "0",
     "--weight_decay", "0",
-    "--resume_from_round", "220",
-    "--checkpoint_path", "checkpoints/global_model_221.pth",
+    # "--resume_from_round", "330",
+    # "--checkpoint_path", "checkpoints/global_model_331.pth",
     "--log_file", "Log10.log"
 )
 # $arg = @(

@@ -24,6 +24,7 @@ def PoC(args, model_type):
         data_size_alphas=args.data_size_alphas,
         start_class_num=args.start_class_num,
         increment_period=args.increment_period,
+        increment_class_num=args.increment_class_num,
         random_seed=args.random_seed
     )
     print(list_of_client_indices_num)
@@ -34,7 +35,8 @@ def PoC(args, model_type):
         class_increment=args.class_increment,
         num_rounds=args.num_rounds,
         start_class_num=args.start_class_num,
-        round_idx_increment=round_idx_increment)
+        round_idx_increment=round_idx_increment,
+        increment_class_num=args.increment_class_num)
 
     Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]

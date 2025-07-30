@@ -20,6 +20,7 @@ def args_parser():
     parser.add_argument("--data_size_alphas", type=str, default="[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]", help="Dirichlet distribution alphas for initial data size distribution (e.g. \"[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1]\")")
     parser.add_argument("--start_class_num", type=int, default=5, help="Starting number of classes for each client (only available when class_increment is True)")
     parser.add_argument("--increment_period", type=int, default=20, help="Period of another one class to join (only available when class_increment is True)")
+    parser.add_argument("--increment_class_num", type=int, default=1, help="Number of classes to increment each period (only available when class_increment is True)")
     parser.add_argument("--random_seed", type=int, default=42, help="Random seed")
     parser.add_argument("--epochs_per_client", "-epoch", type=int, default=5, help="Number of local epochs per client")
     parser.add_argument("--learning_rate", "-lr", type=float, default=0.01, help="Learning rate for local training")

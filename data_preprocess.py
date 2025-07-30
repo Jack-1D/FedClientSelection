@@ -125,6 +125,7 @@ def get_training_data(trainset: str = "CIFAR10",
                       data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
                       start_class_num: int = 5,
                       increment_period: int = 20,
+                      increment_class_num: int = 1,
                       random_seed: int = 42):
     """
     根據不同的數據集和分佈生成訓練數據
@@ -179,7 +180,8 @@ def get_training_data(trainset: str = "CIFAR10",
                                                               rounds_to_get_new_data=rounds_to_get_new_data, 
                                                               data_size_alphas=data_size_alphas,
                                                               start_class_num=start_class_num,
-                                                              increment_period=increment_period)
+                                                              increment_period=increment_period,
+                                                              increment_class_num=increment_class_num)
     elif distribution_shifting:
         return distribution_shifting_training(trainset=trainset,
                                        data_distribution_alpha=data_distribution_alpha, 
@@ -202,7 +204,8 @@ def get_training_data(trainset: str = "CIFAR10",
                                  rounds_to_get_new_data=rounds_to_get_new_data,
                                  data_size_alphas=data_size_alphas,
                                  start_class_num=start_class_num,
-                                 increment_period=increment_period)
+                                 increment_period=increment_period,
+                                 increment_class_num=increment_class_num)
     else:
         raise ValueError("At least one of distribution_shifting or class_increment must be True.")
 
@@ -212,7 +215,8 @@ def get_test_data(testset: str = "CIFAR10",
                   class_increment: bool = False,
                   num_rounds: int = 400,
                   start_class_num: int = 5,
-                  round_idx_increment: List[int] = []):
+                  round_idx_increment: List[int] = [],
+                  increment_class_num: int = 1):
     np.random.seed(random_seed)
     
     if testset == "CIFAR10":
@@ -247,7 +251,7 @@ def get_test_data(testset: str = "CIFAR10",
         for round_idx in range(num_rounds):
             test_indices = []
             if round_idx in round_idx_increment and cur_class_num < len(test_pool):
-                cur_class_num += 1
+                cur_class_num += increment_class_num
             for class_idx in range(cur_class_num):
                 test_indices.extend(test_pool[class_idx])
             list_of_test_loaders.append(DataLoader(Subset(testset, test_indices), batch_size=batch_size, shuffle=False))
@@ -405,7 +409,8 @@ def class_increment_training(
         rounds_to_get_new_data: int = 100,
         data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
         start_class_num: int = 10,
-        increment_period: int = 1):
+        increment_period: int = 1,
+        increment_class_num: int = 1):
     """
     分布轉移的 CIFAR-100 訓練資料分配
     Args:
@@ -468,7 +473,7 @@ def class_increment_training(
     flag = True
     for round_idx in range(num_rounds):
         if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
-            cur_class_num += 1
+            cur_class_num += increment_class_num
             round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
             for class_idx in range(cur_class_num):
@@ -539,7 +544,8 @@ def distribution_shifting_class_increment_training(
         rounds_to_get_new_data: int = 100,
         data_size_alphas: List[float] = [3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
         start_class_num: int = 10,
-        increment_period: int = 1):
+        increment_period: int = 1,
+        increment_class_num: int = 1):
     """
     分布轉移的 CIFAR-100 訓練資料分配
     Args:
@@ -605,7 +611,7 @@ def distribution_shifting_class_increment_training(
     flag = True
     for round_idx in range(num_rounds):
         if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
-            cur_class_num += 1
+            cur_class_num += increment_class_num
             round_idx_increment.append(round_idx + 1)
         for client_idx in range(num_clients):
             for class_idx in range(cur_class_num):
@@ -687,7 +693,8 @@ if __name__ == "__main__":
         rounds_to_get_new_data=100,
         data_size_alphas=[3.7, 8.2, 10.0, 11.0, 3.3, 6.6, 5.5, 7.4, 4.2, 3.1],
         start_class_num=5,
-        increment_period=20
+        increment_period=20,
+        increment_class_num=1
     )
     print("Training data prepared.")
 
