@@ -111,7 +111,7 @@ def fedPro(args, model_type):
             Server.signal_list[client_idx] = Clients[client_idx].check_signal(client_idx, round_idx_increment, args.cs_threshold, round, last_signal, args.kl_threshold, args.kl_epsilon)
 
         # client_losses = [Clients[i].avg_train_loss for i in range(args.num_clients)]
-        if any(Server.signal_list):
+        if True:
             Server.request_to_recompute_probabilities(Clients)
             probabilities = Server.recompute_probabilities(args.alpha, args.softmax_temperature, list_of_dataLoaders, round)
             Server.do_snapshot(Clients)

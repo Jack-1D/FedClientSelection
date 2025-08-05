@@ -111,6 +111,25 @@ class TinyImageNet(Dataset):
         
         return image, target
 
+class SVHN(torchvision.datasets.SVHN):
+    """
+    自定義 SVHN 類別，繼承 torchvision.datasets.SVHN 並添加 classes 和 targets 屬性
+    這樣可以讓 SVHN 與其他資料集保持一致的介面
+    """
+    def __init__(self, root, split='train', transform=None, target_transform=None, download=True):
+        # 調用父類初始化
+        super().__init__(root=root, split=split, transform=transform, 
+                        target_transform=target_transform, download=download)
+        
+        # 添加 targets 屬性（SVHN 使用 labels）
+        self.targets = self.labels.tolist()
+        
+        # 添加 classes 屬性（SVHN 有 10 個數字類別：0-9）
+        self.classes = [str(i) for i in range(10)]
+        
+        # 添加 class_to_idx 屬性
+        self.class_to_idx = {str(i): i for i in range(10)}
+
 def get_training_data(trainset: str = "CIFAR10", 
                       distribution_shifting: bool = True,
                       class_increment: bool = True,
@@ -165,9 +184,17 @@ def get_training_data(trainset: str = "CIFAR10",
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
         trainset = TinyImageNet(root='./data', train=True, transform=transform, download=True)
+    elif trainset == "SVHN":
+        transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.4377, 0.4438, 0.4728], std=[0.1980, 0.2010, 0.1970]),
+        ])
+        trainset = SVHN(root='./data', split='train', download=True, transform=transform)
     else:
-        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', or 'TinyImageNet'.")
-    
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', 'TinyImageNet', or 'SVHN'.")
+
     if distribution_shifting and class_increment:
         return distribution_shifting_class_increment_training(trainset=trainset,
                                                               data_distribution_alpha=data_distribution_alpha, 
@@ -237,9 +264,15 @@ def get_test_data(testset: str = "CIFAR10",
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
         testset = TinyImageNet(root='./data', train=False, transform=transform, download=True)
+    elif testset == "SVHN":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.4377, 0.4438, 0.4728], std=[0.1980, 0.2010, 0.1970]),
+        ])
+        testset = SVHN(root='./data', split='test', download=True, transform=transform)
     else:
-        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', or 'TinyImageNet'.")
-    
+        raise ValueError("Unsupported dataset. Please choose 'CIFAR10', 'CIFAR100', 'TinyImageNet', or 'SVHN'.")
+
     if class_increment:
         test_pool = defaultdict(list)
         for idx, (image, label) in enumerate(testset):
@@ -346,8 +379,8 @@ def distribution_shifting_training(
                     train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
-            # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
+            # 紀錄這一輪的資料分布 (移除，此函數不需要)
+            # list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
         # 檢查資料是否用完
         remaining_data = sum([len(indices) for indices in train_pool.values()])
         if remaining_data == 0 and flag:
@@ -452,6 +485,8 @@ def class_increment_training(
     list_of_dataLoaders = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client的資料量
     list_of_data_sizes = [[0 for _ in range(num_clients)] for _ in range(num_rounds)]
+    # 每一輪每個client的資料分布
+    # list_of_data_distributions = [[[] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 每一輪每個client每個class的資料量
     list_of_client_indices_num = [[[0 for _ in range(len(trainset.classes))] for _ in range(num_clients)] for _ in range(num_rounds)]
     # 紀錄新class進入的round index
@@ -488,6 +523,8 @@ def class_increment_training(
                     train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
+            # 紀錄這一輪的資料分布 (移除，此函數不需要)
+            # list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
         # 檢查資料是否用完
         remaining_data = sum([len(indices) for indices in train_pool.values()])
         if remaining_data == 0 and flag:
@@ -606,7 +643,6 @@ def distribution_shifting_class_increment_training(
             list_of_data_sizes[0][client_idx] += len(selected_indices)
 
     cumu = [0 for _ in range(num_clients)]
-    all_distributions = [data_distribution_clients_proportions]
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
@@ -626,8 +662,8 @@ def distribution_shifting_class_increment_training(
                     train_pool[class_idx] = [idx for idx in train_pool[class_idx] if idx not in selected_indices]
                     # 紀錄這一輪的資料量
                     list_of_data_sizes[round_idx][client_idx] += avail_data_size
-            # 紀錄這一輪的資料分布
-            list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
+            # 紀錄這一輪的資料分布 (移除，此函數不需要)
+            # list_of_data_distributions[round_idx][client_idx].extend(data_distribution_clients_proportions[client_idx])
         # 檢查資料是否用完
         remaining_data = sum([len(indices) for indices in train_pool.values()])
         if remaining_data == 0 and flag:
@@ -641,11 +677,6 @@ def distribution_shifting_class_increment_training(
         # 資料量分布更新
         new_data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
         data_size_clients_proportions = new_data_size_distribution_weight * new_data_size_clients_proportions + (1 - new_data_size_distribution_weight) * data_size_clients_proportions
-        # 資料分布更新
-        new_proportions = np.random.dirichlet([data_distribution_alpha] * len(trainset.classes), num_clients)
-        data_distribution_clients_proportions = new_distribution_weight * new_proportions + (1 - new_distribution_weight) * data_distribution_clients_proportions
-        
-        all_distributions.append(data_distribution_clients_proportions)
     # Plot each client's data size per class for each round, separated by client
     draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
     # 顯示每一輪資料量消耗的圖

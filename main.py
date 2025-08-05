@@ -25,6 +25,8 @@ elif args.dataset == "CIFAR100":
     num_classes = 100
 elif args.dataset == "TinyImageNet":
     num_classes = 200
+elif args.dataset == "SVHN":
+    num_classes = 10
 else:
     raise ValueError(f"Unsupported dataset: {args.dataset}")
 
