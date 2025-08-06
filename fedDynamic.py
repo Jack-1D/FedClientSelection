@@ -118,8 +118,12 @@ def fedDynamic(args, model_type):
             last_signal = round
 
         # selected_clients = np.sort(np.random.choice(client_list, size=participate_client_num, p=probabilities, replace=False))
-        print("Score:", Server.score)
-        selected_clients = np.argsort(Server.score)[-participate_client_num:]
+        if all(score == 0.0 for score in Server.score):
+            selected_clients = np.random.choice(client_list, size=participate_client_num, replace=False)
+            print("All scores are zero, randomly selected clients.")
+        else:
+            print("Score:", Server.score)
+            selected_clients = np.argsort(Server.score)[-participate_client_num:]
         print(f"Selected clients for round {round + 1}: {selected_clients}")
         # 記錄每一輪選到的client
         for client_idx in selected_clients:

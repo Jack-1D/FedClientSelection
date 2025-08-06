@@ -17,6 +17,7 @@ class FLServer:
         self.clients_cs_score = [0.0 for _ in range(num_clients)]
         self.clients_label_size_from_last_signal_proportions = [0.0 for _ in range(num_clients)]
         self.clients_nse = [0.0 for _ in range(num_clients)]
+        self.score = [0.0 for _ in range(num_clients)]
         
         # 保存初始參數用於恢復訓練
         self.num_rounds = num_rounds
