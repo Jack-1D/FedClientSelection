@@ -11,6 +11,7 @@ from PoC import PoC
 from OCS import OCS
 from PNCS import PNCS
 from fedPromid import fedPromid
+from fedDynamic import fedDynamic
 
 
 args = args_parser()
@@ -50,5 +51,7 @@ if __name__ == "__main__":
         PNCS(args, model_type)
     elif args.method == "fedPromid":
         fedPromid(args, model_type)
+    elif args.method == "fedDynamic":
+        fedDynamic(args, model_type)
     else:
         raise ValueError(f"Method {args.method} is not supported. Please choose 'proposed' or 'random'.")
