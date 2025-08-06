@@ -507,9 +507,9 @@ def class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
+        if round_idx % increment_period == 0 and round_idx != 0 and cur_class_num < len(trainset.classes):
             cur_class_num += increment_class_num
-            round_idx_increment.append(round_idx + 1)
+            round_idx_increment.append(round_idx)
         for client_idx in range(num_clients):
             for class_idx in range(cur_class_num):
                 # 隨機選擇資料
@@ -646,9 +646,9 @@ def distribution_shifting_class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if round_idx % increment_period == 0 and cur_class_num < len(trainset.classes):
+        if round_idx % increment_period == 0 and round_idx != 0 and cur_class_num < len(trainset.classes):
             cur_class_num += increment_class_num
-            round_idx_increment.append(round_idx + 1)
+            round_idx_increment.append(round_idx)
         for client_idx in range(num_clients):
             for class_idx in range(cur_class_num):
                 # 隨機選擇資料
