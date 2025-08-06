@@ -102,9 +102,9 @@ class FLServer:
     def recompute_probabilities(self, alpha, temperature, list_of_dataLoaders, round):
         print(self.clients_cs_score)
         print([len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)]) for i in range(self.num_clients)])
-        score = [(alpha * (self.clients_cs_score[i] + 1) / 2 + (1-alpha) * len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)])) for i in range(self.num_clients)]
+        self.score = [(alpha * (self.clients_cs_score[i] + 1) / 2 + (1-alpha) * len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)])) for i in range(self.num_clients)]
         # score = [(alpha * self.clients_cs_score[i] + beta * len(list_of_dataLoaders[i][round].dataset) / np.sum([len(list_of_dataLoaders[j][round].dataset) for j in range(self.num_clients)]) + gamma * self.clients_nse[i]) / (alpha + beta + gamma) for i in range(self.num_clients)]
-        scaled_score = torch.tensor(score) / temperature
+        scaled_score = torch.tensor(self.score) / temperature
         probabilities = F.softmax(scaled_score, dim=0).numpy()
         return probabilities
     
