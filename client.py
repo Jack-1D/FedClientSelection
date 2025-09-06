@@ -268,7 +268,7 @@ class FLClient:
         # if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
         if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal):
             print(f"Client {client_idx}, signal:", 
-                  f"new_class_incoming" if (round+1) in round_idx_increment else "",
+                  f"new_class_incoming" if round in round_idx_increment else "",
                   f"cs={self._cs:.4f}" if (self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 
                 #   f"local_kl={self.kl.item():.4f}" if self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon) else ""

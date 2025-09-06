@@ -142,3 +142,28 @@ def draw_accuracy(num_rounds, accuracies, dirichlet_alpha):
     plt.grid(True)
     os.makedirs('result_plot', exist_ok=True)
     plt.savefig('result_plot/accuracy_vs_round_dirichlet_10.png')
+
+def draw_zeta(num_rounds, all_zeta_per_round):
+    """
+    Draw the average zeta value over rounds.
+    :param num_rounds: Number of rounds
+    :param all_zeta_per_round: List of average zeta values per round
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(num_rounds), all_zeta_per_round, marker='o', color='purple')
+    plt.xlabel('Round')
+    plt.ylabel('Average Zeta Value')
+    plt.title('Average Zeta Value over Rounds')
+    plt.grid(True)
+    os.makedirs('result_plot', exist_ok=True)
+    plt.savefig('result_plot/zeta_per_round.png')
+
+def draw_cs_mean(num_rounds, cs_mean_record):
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, num_rounds + 1), cs_mean_record, marker='o')
+    plt.xlabel('Round')
+    plt.ylabel('Average CS')
+    plt.title('Average CS per Round')
+    plt.grid(True)
+    os.makedirs('result_plot', exist_ok=True)
+    plt.savefig('result_plot/average_cs_per_round.png')

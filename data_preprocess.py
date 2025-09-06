@@ -677,6 +677,9 @@ def distribution_shifting_class_increment_training(
         # 資料量分布更新
         new_data_size_clients_proportions = np.random.dirichlet(data_size_alphas)
         data_size_clients_proportions = new_data_size_distribution_weight * new_data_size_clients_proportions + (1 - new_data_size_distribution_weight) * data_size_clients_proportions
+        # 資料分布更新
+        new_proportions = np.random.dirichlet([data_distribution_alpha] * len(trainset.classes), num_clients)
+        data_distribution_clients_proportions = new_distribution_weight * new_proportions + (1 - new_distribution_weight) * data_distribution_clients_proportions
     # Plot each client's data size per class for each round, separated by client
     draw_client_label_each_round(num_clients, num_rounds, trainset, list_of_client_indices_num)
     # 顯示每一輪資料量消耗的圖
