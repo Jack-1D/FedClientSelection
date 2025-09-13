@@ -127,7 +127,7 @@ def OCS(args, model_type):
         sorted_indices = np.argsort(weighted_norms)
         sorted_norms = weighted_norms[sorted_indices]
 
-        m = min(participate_client_num, 8)  # 限制最多選擇 8 個 client
+        m = min(participate_client_num, 5)  # 限制最多選擇 8 個 client
         l = 0
         for l in range(n):
             if sorted_norms[l] == 0:
@@ -152,8 +152,8 @@ def OCS(args, model_type):
 
         # Bernoulli sampling：決定哪些 client 被選中
         selected_clients = np.array([i for i in range(n) if np.random.rand() < p[i]])
-        if len(selected_clients) > 8:  # 如果選中的 client 超過 8 個，隨機選擇 8 個
-            selected_clients = np.random.choice(selected_clients, 8, replace=False)
+        if len(selected_clients) > 5:  # 如果選中的 client 超過 5 個，隨機選擇 5 個
+            selected_clients = np.random.choice(selected_clients, 5, replace=False)
         print(f"Selected clients (OCS) for round {round + 1}: {selected_clients}")
 
         # 記錄每一輪選到的client
