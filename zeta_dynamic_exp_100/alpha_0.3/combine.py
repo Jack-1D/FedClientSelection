@@ -31,9 +31,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 SELECTED_FILES = [
     'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T).log',
     'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T).log',
+    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
+    'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
     'keepSignal(zeta=0.5).log',
     'PNCS.log',
     'random.log',
+    'OCS.log',
+    'PoC.log',
 ]
 
 # 選項2: 排除特定檔案
@@ -166,7 +170,7 @@ def annotate_last_compact(epochs_list, accuracies_list, colors, labels, gap=6):
         y_annotate = last_points[0][0] - idx * gap  # 固定間隔
         plt.annotate(f'{label}: {acc:.2f}%', 
                      xy=(epoch, acc), 
-                     xytext=(x_annotate-200, y_annotate-45),
+                     xytext=(x_annotate-180, y_annotate-35),
                      textcoords='data',
                      fontsize=9,
                      color=color,

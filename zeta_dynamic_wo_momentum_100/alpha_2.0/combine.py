@@ -29,22 +29,16 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 選項1: 指定特定檔案列表（推薦）
 SELECTED_FILES = [
-    # 'dynamic(zeta=1.0, signal add last cs diff).log',
-    # 'dynamic(zeta=1.0, signal times 0.95).log',
-    # 'dynamic(zeta=1.0, signal times last cs diff).log',
-    'dynamic(zeta=1.0, signal times log cs diff).log',
-    'dynamic(zeta=1.0, signal times amplify cs diff).log',
-    'dynamic(zeta=1.0, signal times cs diff 1-t div T upper 1-t div T).log',
     'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T).log',
     'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
-    # 'dynamic(zeta=1.0, signal times sqrt cs diff).log',
-    'keepSignal(zeta=0.5).log',
-    # 'keepSignal(zeta=1.0).log',
+    # 'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
+    # 'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
+    # 'keepSignal(zeta=0.5).log',
+    'keepSignal(zeta=0.5, t=0.1333).log',
     'PNCS.log',
     'random.log',
     'OCS.log',
+    'PoC.log',
 ]
 
 # 選項2: 排除特定檔案
@@ -177,7 +171,7 @@ def annotate_last_compact(epochs_list, accuracies_list, colors, labels, gap=6):
         y_annotate = last_points[0][0] - idx * gap  # 固定間隔
         plt.annotate(f'{label}: {acc:.2f}%', 
                      xy=(epoch, acc), 
-                     xytext=(x_annotate-55, y_annotate-23),
+                     xytext=(x_annotate-200, y_annotate-25),
                      textcoords='data',
                      fontsize=9,
                      color=color,
