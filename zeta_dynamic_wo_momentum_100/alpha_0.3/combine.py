@@ -26,19 +26,26 @@ def get_clean_label(filename):
 # ====== 檔案管理設定 ======
 # 你可以在這裡控制要比較的檔案
 current_dir = os.path.dirname(os.path.abspath(__file__))
+LABEL_MAP = {
+    'keepSignal(zeta=0.5)': 'Keep Signal',
+    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0)': 'Zeta Dynamic',
+}
 
+def get_clean_label(filename):
+    """從檔案名稱生成清晰的標籤"""
+    name = filename.replace('.log', '')
+    return LABEL_MAP.get(name, name)
 # 選項1: 指定特定檔案列表（推薦）
 SELECTED_FILES = [
-    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
-    # 'keepSignal(zeta=0.5).log',
-    'keepSignal(zeta=0.5, t=0.1333).log',
-    'PNCS.log',
-    'random.log',
-    'OCS.log',
     'PoC.log',
+    'OCS.log',
+    'PNCS.log',
+    # 'topDataSize.log',
+    # 'cs.log',
+    # 'random.log',
+    'keepSignal(zeta=0.5).log',
+    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
+    # 'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
 ]
 
 # 選項2: 排除特定檔案
@@ -128,6 +135,7 @@ for i, data in enumerate(all_data):
     color = colors[i % len(colors)]
     plt.plot(data['epochs'], data['accuracies'], 
              label=data['label'], color=color, linewidth=2)
+    plt.tick_params(axis='both', which='major', labelsize=16)
 
 # 提取資料用於標註功能
 epochs_list = [data['epochs'] for data in all_data]
@@ -171,14 +179,14 @@ def annotate_last_compact(epochs_list, accuracies_list, colors, labels, gap=6):
         y_annotate = last_points[0][0] - idx * gap  # 固定間隔
         plt.annotate(f'{label}: {acc:.2f}%', 
                      xy=(epoch, acc), 
-                     xytext=(x_annotate-200, y_annotate-20),
+                     xytext=(x_annotate-60, y_annotate-40),
                      textcoords='data',
                      fontsize=9,
                      color=color,
                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=color, lw=0.8),
                      ha='left', va='center')
 
-annotate_last_compact(epochs_list, accuracies_list, plot_colors, labels, gap=3)
+# annotate_last_compact(epochs_list, accuracies_list, plot_colors, labels, gap=3)
 
 def annotate_epoch_accuracy_sorted(epochs_list, accuracies_list, colors, labels, target_epoch, gap=6):
     epoch_points = []
@@ -192,7 +200,7 @@ def annotate_epoch_accuracy_sorted(epochs_list, accuracies_list, colors, labels,
         y_annotate = epoch_points[0][0] - i * gap  # 固定間隔
         plt.annotate(f'{label} @ {target_epoch}: {acc:.2f}%',
                      xy=(target_epoch, acc),
-                     xytext=(target_epoch - 280, y_annotate - 30),
+                     xytext=(target_epoch - 280, y_annotate - 40),
                      textcoords='data',
                      fontsize=9,
                      color=color,
@@ -205,10 +213,10 @@ def annotate_epoch_accuracy_sorted(epochs_list, accuracies_list, colors, labels,
 # plt.axvline(x=target_epoch, color='gray', linestyle='--', linewidth=1, alpha=0.5)
 # plt.text(target_epoch, plt.ylim()[0] - 3, str(target_epoch), color='gray', fontsize=9, ha='center', va='bottom', alpha=0.7)
 
-plt.title('Accuracy Comparison')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy (%)')
-plt.legend(loc='lower left', fontsize='small', ncol=3)
+# plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α=0.3)')
+plt.xlabel('Round', fontsize=18)
+plt.ylabel('Accuracy (%)', fontsize=18)
+plt.legend(loc='lower right', fontsize=16, ncol=1)
 plt.grid(True)
 plt.savefig('accuracy_comparison.png')
 plt.show()
