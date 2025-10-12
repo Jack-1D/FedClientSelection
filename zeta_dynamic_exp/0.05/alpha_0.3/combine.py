@@ -256,7 +256,7 @@ plt.ylabel('Accuracy (%)', fontsize=22)
 plt.legend(loc='lower right', fontsize=20, ncol=1)
 plt.grid(True)
 plt.tight_layout()
-plt.savefig('ResNet18_2.0_0.1.png')
+plt.savefig('CNN_0.3_0.05.png')
 plt.show()
 
 # ====== 使用說明 ======

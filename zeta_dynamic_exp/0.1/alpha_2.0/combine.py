@@ -26,16 +26,21 @@ def get_clean_label(filename):
 # ====== 檔案管理設定 ======
 # 你可以在這裡控制要比較的檔案
 current_dir = os.path.dirname(os.path.abspath(__file__))
-LABEL_MAP = {
-    'keepSignal(zeta=0.5)': 'Keep Signal',
-    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0)': 'Zeta Dynamic',
+
+# 檔案分組設定
+AVG_GROUPS = {
+    # 'Keep Signal': [
+    #     'keepSignal(zeta=0.5)_42.log',
+    #     'keepSignal(zeta=0.5)_43.log',
+    #     'keepSignal(zeta=0.5)_44.log',
+    # ],
+    'Zeta Dynamic': [
+        'dynamic(zeta=1.0)_42.log',
+        'dynamic(zeta=1.0)_44.log',
+        'dynamic(zeta=1.0)_46.log',
+    ],
 }
 
-def get_clean_label(filename):
-    """從檔案名稱生成清晰的標籤"""
-    name = filename.replace('.log', '')
-    return LABEL_MAP.get(name, name)
-# 選項1: 指定特定檔案列表（推薦）
 SELECTED_FILES = [
     'PoC.log',
     'OCS.log',
@@ -43,9 +48,7 @@ SELECTED_FILES = [
     # 'topDataSize.log',
     # 'cs.log',
     # 'random.log',
-    'keepSignal(zeta=0.5).log',
-    'dynamic(zeta=1.0, signal times log cs diff upper 1-t div T lower 0).log',
-    # 'dynamic(zeta=1.0, signal times log cs diff upper times 1-t div T lower 0).log',
+    # 平均曲線不直接列入，後面處理
 ]
 
 # 選項2: 排除特定檔案
@@ -100,26 +103,59 @@ print(f"Found {len(log_files)} log files:")
 for file in log_files:
     print(f"  - {os.path.basename(file)}")
 
-# 讀取所有數據
+
+# 讀取所有數據（單檔案）
 all_data = []
 for log_file in log_files:
     filename = os.path.basename(log_file)
     epochs, accuracies = parse_log_file(log_file)
-    if epochs and accuracies:  # 只保留成功讀取的檔案
+    if epochs and accuracies:
         label = get_clean_label(filename)
-        all_data.append({
-            'filename': filename,
-            'label': label,
-            'epochs': epochs,
-            'accuracies': accuracies
-        })
-        print(f"Successfully loaded {filename}: {len(epochs)} data points")
+        # 跳過要做平均的檔案
+        if filename not in sum(AVG_GROUPS.values(), []):
+            all_data.append({
+                'filename': filename,
+                'label': label,
+                'epochs': epochs,
+                'accuracies': accuracies
+            })
+            print(f"Successfully loaded {filename}: {len(epochs)} data points")
     else:
         print(f"Failed to load data from {filename}")
 
+# 讀取並平均分組檔案
+for label, files in AVG_GROUPS.items():
+    group_epochs = []
+    group_accs = []
+    for fname in files:
+        fpath = os.path.join(current_dir, fname)
+        if os.path.exists(fpath):
+            epochs, accs = parse_log_file(fpath)
+            if epochs and accs:
+                group_epochs.append(epochs)
+                group_accs.append(accs)
+                print(f"Loaded for average: {fname} ({len(epochs)} points)")
+        else:
+            print(f"Missing for average: {fname}")
+    # 取平均（以最短長度為基準）
+
+    if group_epochs and group_accs:
+        min_len = min(len(e) for e in group_epochs)
+        avg_epochs = group_epochs[0][:min_len]
+        avg_accs = [float(sum(accs[i] for accs in group_accs)) / len(group_accs) for i in range(min_len)]
+        # 印出最後一輪的 accuracy
+        print(f"Average method [{label}] last round: epoch={avg_epochs[-1]}, accuracy={avg_accs[-1]:.2f}%")
+        all_data.append({
+            'filename': '+'.join(files),
+            'label': label,
+            'epochs': avg_epochs,
+            'accuracies': avg_accs
+        })
+        print(f"Added average curve for {label}: {len(avg_epochs)} points")
+
 print(f"\nLoaded {len(all_data)} datasets for comparison.")
 
-plt.figure(figsize=(12, 6))
+plt.figure(figsize=(8, 6))
 
 # 定義顏色調色盤
 colors = [
@@ -135,7 +171,7 @@ for i, data in enumerate(all_data):
     color = colors[i % len(colors)]
     plt.plot(data['epochs'], data['accuracies'], 
              label=data['label'], color=color, linewidth=2)
-    plt.tick_params(axis='both', which='major', labelsize=16)
+    plt.tick_params(axis='both', which='major', labelsize=20)
 
 # 提取資料用於標註功能
 epochs_list = [data['epochs'] for data in all_data]
@@ -214,11 +250,13 @@ def annotate_epoch_accuracy_sorted(epochs_list, accuracies_list, colors, labels,
 # plt.text(target_epoch, plt.ylim()[0] - 3, str(target_epoch), color='gray', fontsize=9, ha='center', va='bottom', alpha=0.7)
 
 # plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α=0.3)')
-plt.xlabel('Round', fontsize=18)
-plt.ylabel('Accuracy (%)', fontsize=18)
-plt.legend(loc='lower right', fontsize=16, ncol=1)
+# plt.xlabel('Round', fontsize=18, fontweight='bold')
+plt.xlabel('Round', fontsize=22)
+plt.ylabel('Accuracy (%)', fontsize=22)
+plt.legend(loc='lower right', fontsize=20, ncol=1)
 plt.grid(True)
-plt.savefig('accuracy_comparison.png')
+plt.tight_layout()
+plt.savefig('CNN_2.0_0.1.png')
 plt.show()
 
 # ====== 使用說明 ======
