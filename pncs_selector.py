@@ -181,13 +181,19 @@ class PNCSClientSelector:
         print(f"Candidates (not in queue): {candidates}")
         
         if len(candidates) < self.J:
-            print(f"Error: Too few candidates ({len(candidates)}) to select {self.J} clients")
-            if len(candidates) > 0:
-                for cid in candidates:
-                    self.queue[cid] = self.queue_len
-                return candidates
-            else:
-                raise ValueError("No valid candidates to select from")
+            print(f"Warning: Too few candidates ({len(candidates)}) to select {self.J} clients, will include queue clients.")
+            # 補 queue client
+            all_clients = list(valid_gradients.keys())
+            # 先選非 queue client，再補 queue client
+            selected = candidates.copy()
+            for cid in all_clients:
+                if cid not in selected:
+                    selected.append(cid)
+                if len(selected) >= self.J:
+                    break
+            for cid in selected:
+                self.queue[cid] = self.queue_len
+            return selected
 
         # 檢查組合數量，決定使用精確算法還是近似算法
         num_combinations = comb(len(candidates), self.J)
@@ -280,12 +286,19 @@ class PNCSClientSelector:
         candidates = [cid for cid in valid_gradients if not self.in_queue(cid)]
         
         if len(candidates) < self.J:
-            if len(candidates) > 0:
-                for cid in candidates:
-                    self.queue[cid] = self.queue_len
-                return candidates
-            else:
-                raise ValueError("No valid candidates to select from")
+            print(f"Warning: Too few candidates ({len(candidates)}) to select {self.J} clients, will include queue clients.")
+            # 補 queue client
+            all_clients = list(valid_gradients.keys())
+            # 先選非 queue client，再補 queue client
+            selected = candidates.copy()
+            for cid in all_clients:
+                if cid not in selected:
+                    selected.append(cid)
+                if len(selected) >= self.J:
+                    break
+            for cid in selected:
+                self.queue[cid] = self.queue_len
+            return selected
         
         # Greedy selection: 選擇最分散的梯度
         client_ids = list(valid_gradients.keys())
