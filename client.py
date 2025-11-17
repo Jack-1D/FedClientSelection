@@ -9,13 +9,14 @@ from torch.nn import functional as F
 from loss import client_count_cs_score, normalized_shannon_entropy
 
 class FLClient:
-    def __init__(self, model_type, data_loader, total_class, num_clients, lr=0.01, momentum=0.9, weight_decay=5e-4):
+    def __init__(self, model_type, data_loader, total_class, num_clients, lr=0.01, momentum=0.9, weight_decay=5e-4, mu=0.5):
         self.model_type = model_type
         self.total_class = total_class
         self.num_clients = num_clients
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model_type
         self.global_model_replica = self.model
+        self.mu = mu
         # dataLoader of each round
         self.data_loader = data_loader
         # 紀錄從前一次signal到目前的資料累積

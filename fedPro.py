@@ -40,7 +40,7 @@ def fedPro(args, model_type):
 
     Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
-    Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]
+    Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay, mu=args.mu) for i in range(args.num_clients)]
 
     # 用於記錄每輪的準確率
     accuracies = []
