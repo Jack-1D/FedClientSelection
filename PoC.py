@@ -119,19 +119,7 @@ def PoC(args, model_type):
         selected_clients = sorted(sampled_client_losses, key=sampled_client_losses.get, reverse=True)[:3]
         print(f"Selected clients for aggregation: {selected_clients}")
         client_losses = [Clients[i].avg_train_loss for i in range(args.num_clients)]
-        # if True:
-        #     Server.request_to_recompute_probabilities(Clients)
-        #     probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature, list_of_dataLoaders, round)
-        #     Server.do_snapshot(Clients)
-        #     print(f"Updated probabilities: {probabilities}")
-        #     last_signal = round
 
-        # if any(Server.signal_list):
-        #     Server.request_to_recompute_probabilities(Clients)
-        #     probabilities = Server.recompute_probabilities(args.alpha, args.beta, args.gamma, args.temperature, list_of_dataLoaders, round)
-        #     Server.do_snapshot(Clients)
-        #     print(f"Updated probabilities: {probabilities}")
-        #     last_signal = round
         print(f"Client losses: {client_losses}")
         selected_clients = np.argsort(client_losses)[-participate_client_num:]
         print(f"Selected clients for round {round + 1}: {selected_clients}")

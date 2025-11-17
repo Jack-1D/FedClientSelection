@@ -36,14 +36,14 @@ def compute_kl_divergence(model1, model2, data_loader, device):
     
     return kl_div / total_samples if total_samples > 0 else float('inf')
 
-def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader, alpha=0.5):
+def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader, mu=0.5):
     """
     計算客戶端的 CS Score，結合 extractor 和 predictor 的 cosine similarity
     :param model_type: 客戶端模型類型
     :param global_model: 全局模型
     :param local_state_dict: 客戶端模型的狀態字典
     :param dataLoader: 客戶端數據加載器
-    :param alpha: 合併 extractor 和 predictor 的權重超參數
+    :param mu: 合併 extractor 和 predictor 的權重超參數
     :return: CS Score
     """
     local_model = copy.deepcopy(model_type)
@@ -75,8 +75,8 @@ def client_count_cs_score(model_type, global_model, local_state_dict, dataLoader
             # Cosine similarity for predictor
             predictor_sim = F.cosine_similarity(global_predictor_output, local_predictor_output, dim=1)
             
-            # Combine extractor and predictor similarity using alpha
-            combined_sim = alpha * extractor_sim + (1 - alpha) * predictor_sim
+            # Combine extractor and predictor similarity using mu
+            combined_sim = mu * extractor_sim + (1 - mu) * predictor_sim
             
             total_cs += combined_sim.cpu().sum().item()  # 把 batch 裡所有 sample 的 loss 加總
 

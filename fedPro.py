@@ -112,7 +112,7 @@ def fedPro(args, model_type):
 
         if any(Server.signal_list):
             Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(args.alpha, args.softmax_temperature, list_of_dataLoaders, round)
+            probabilities = Server.recompute_probabilities(args.zeta, args.softmax_temperature, list_of_dataLoaders, round)
             Server.do_snapshot(Clients)
             print(f"Updated probabilities: {probabilities}")
             last_signal = round
@@ -125,7 +125,6 @@ def fedPro(args, model_type):
 
         weights = [1.0 / participate_client_num for _ in range(args.num_clients)]
         Server.server_aggregate(Clients, selected_clients, weights)
-        # Server.server_aggregate(Clients, selected_clients, [Clients[i].data_size_from_last_signal / np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) if i in selected_clients and np.sum([Clients[j].data_size_from_last_signal for j in selected_clients]) != 0 else 1.0 / len(selected_clients) for i in range(args.num_clients)])
 
         accuracy, loss = Server.test_model(list_of_testloaders[round])
         accuracies.append(accuracy)
@@ -137,7 +136,6 @@ def fedPro(args, model_type):
         if round % 10 == 0:
             cur_model_path = f"checkpoints/global_model_{round+1}.pth"
             Server.save_model(cur_model_path)
-
         
 
     # 保存最終模型

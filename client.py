@@ -214,7 +214,7 @@ class FLClient:
             self.optimizer.load_state_dict(global_optimizer_state_dict)
 
     def compute_cs_score(self, round):
-        self._cs = client_count_cs_score(self.model_type, self.global_model_replica, self.model.state_dict(), self.data_loader[round])
+        self._cs = client_count_cs_score(self.model_type, self.global_model_replica, self.model.state_dict(), self.data_loader[round], self.mu)
 
     def compute_nse(self):
         self.nse = normalized_shannon_entropy(self.label_size_to_cur)
@@ -267,7 +267,8 @@ class FLClient:
     def check_signal(self, client_idx, round_idx_increment, cs_threshold, round, last_signal, kl_threshold, kl_epsilon=1e-10):
         # if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal) or self.check_local_iid_signal(client_idx, kl_threshold, kl_epsilon):
         if round in round_idx_increment or self.check_cs_signal(cs_threshold) or self.check_data_size_rank_change_siganl(round, last_signal):
-            print(f"Client {client_idx}, signal:", 
+            print(f'Round {round}:',
+                  f"Client {client_idx}, signal:", 
                   f"new_class_incoming" if round in round_idx_increment else "",
                   f"cs={self._cs:.4f}" if (self.check_cs_signal(cs_threshold)) else "", 
                   f"prev_data_size_rank={self.prev_data_size_from_last_signal_rank}, data_size_rank={self.data_size_from_last_signal_rank}" if self.check_data_size_rank_change_siganl(round, last_signal) else "", 

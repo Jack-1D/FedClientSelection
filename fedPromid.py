@@ -144,7 +144,7 @@ def fedPromid(args, model_type):
         # client_losses = [Clients[i].avg_train_loss for i in range(args.num_clients)]
         if True:
             Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(args.alpha, args.softmax_temperature, list_of_dataLoaders, round)
+            probabilities = Server.recompute_probabilities(args.zeta, args.softmax_temperature, list_of_dataLoaders, round)
             Server.do_snapshot(Clients)
             print(f"Updated probabilities: {probabilities}")
             last_signal = round
