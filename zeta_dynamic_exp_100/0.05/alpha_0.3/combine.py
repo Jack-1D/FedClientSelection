@@ -34,7 +34,7 @@ AVG_GROUPS = {
     #     'keepSignal(zeta=0.5)_43.log',
     #     'keepSignal(zeta=0.5)_44.log',
     # ],
-    'Zeta Dynamic': [
+    'FedUE': [
         'dynamic(zeta=1.0)_42.log',
         'dynamic(zeta=1.0)_43.log',
         'dynamic(zeta=1.0)_44.log',

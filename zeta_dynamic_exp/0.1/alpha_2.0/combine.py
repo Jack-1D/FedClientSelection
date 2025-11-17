@@ -26,7 +26,31 @@ def get_clean_label(filename):
 # ====== 檔案管理設定 ======
 # 你可以在這裡控制要比較的檔案
 current_dir = os.path.dirname(os.path.abspath(__file__))
+# 在繪圖前後自動加入每 15 round 一條垂直線（15,30,...,75）
+VLINE_START = 15
+VLINE_END = 75
+VLINE_STEP = 15
+VLINE_X = list(range(VLINE_START, VLINE_END + 1, VLINE_STEP))
 
+# 包裝 plt.savefig / plt.show，確保在輸出或顯示圖形前畫上垂直線
+_orig_savefig = plt.savefig
+_orig_show = plt.show
+
+def _draw_vlines():
+    ax = plt.gca()
+    for x in VLINE_X:
+        ax.axvline(x=x, color='black', linestyle='--', linewidth=1)
+
+def _savefig_override(*args, **kwargs):
+    _draw_vlines()
+    return _orig_savefig(*args, **kwargs)
+
+def _show_override(*args, **kwargs):
+    _draw_vlines()
+    return _orig_show(*args, **kwargs)
+
+plt.savefig = _savefig_override
+plt.show = _show_override
 # 檔案分組設定
 AVG_GROUPS = {
     # 'Keep Signal': [
@@ -34,7 +58,7 @@ AVG_GROUPS = {
     #     'keepSignal(zeta=0.5)_43.log',
     #     'keepSignal(zeta=0.5)_44.log',
     # ],
-    'Zeta Dynamic': [
+    'FedUE': [
         'dynamic(zeta=1.0)_42.log',
         'dynamic(zeta=1.0)_44.log',
         'dynamic(zeta=1.0)_46.log',
