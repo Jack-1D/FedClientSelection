@@ -493,6 +493,13 @@ def class_increment_training(
     round_idx_increment = []
     cur_class_num = start_class_num
 
+    increment_period_list = []
+    current_round = start_class_num
+    num_increments = (len(trainset.classes) - start_class_num) // increment_class_num
+    for i in range(num_increments):
+        current_round += np.random.randint(1, 2 * increment_period + 1)
+        increment_period_list.append(current_round)
+
     # 避免dataLoader為空
     for client_idx in range(num_clients):
         random_class = np.random.choice(start_class_num, size=1, replace=False)[0]
@@ -507,7 +514,7 @@ def class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if round_idx % increment_period == 0 and round_idx != 0 and cur_class_num < len(trainset.classes):
+        if round_idx in increment_period_list and round_idx != 0 and cur_class_num < len(trainset.classes):
             cur_class_num += increment_class_num
             round_idx_increment.append(round_idx)
         for client_idx in range(num_clients):
@@ -632,6 +639,13 @@ def distribution_shifting_class_increment_training(
     round_idx_increment = []
     cur_class_num = start_class_num
 
+    increment_period_list = []
+    current_round = start_class_num
+    num_increments = (len(trainset.classes) - start_class_num) // increment_class_num
+    for i in range(num_increments):
+        current_round += np.random.randint(1, 2 * increment_period + 1)
+        increment_period_list.append(current_round)
+
     # 避免dataLoader為空
     for client_idx in range(num_clients):
         random_class = np.random.choice(start_class_num, size=1, replace=False)[0]
@@ -646,7 +660,7 @@ def distribution_shifting_class_increment_training(
     record_end = -1
     flag = True
     for round_idx in range(num_rounds):
-        if round_idx % increment_period == 0 and round_idx != 0 and cur_class_num < len(trainset.classes):
+        if round_idx in increment_period_list and round_idx != 0 and cur_class_num < len(trainset.classes):
             cur_class_num += increment_class_num
             round_idx_increment.append(round_idx)
         for client_idx in range(num_clients):
