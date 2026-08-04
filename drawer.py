@@ -134,8 +134,15 @@ def draw_accuracy(num_rounds, accuracies, dirichlet_alpha):
     :param accuracies: List of accuracies for each round
     :param dirichlet_alpha: Dirichlet alpha value used in the experiment
     """
+    # 如果資料為空，直接返回（避免 crash）
+    if len(accuracies) == 0:
+        print("Warning: accuracies is empty, skipping accuracy plot.")
+        return
+    
+    # 使用實際的資料長度
+    actual_rounds = len(accuracies)
     plt.figure(figsize=(10, 6))
-    plt.plot(range(1, num_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
+    plt.plot(range(1, actual_rounds + 1), accuracies, marker='o', linestyle='-', color='b')
     plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α={dirichlet_alpha})')
     plt.xlabel('Round')
     plt.ylabel('Test Accuracy (%)')
@@ -149,8 +156,15 @@ def draw_zeta(num_rounds, all_zeta_per_round):
     :param num_rounds: Number of rounds
     :param all_zeta_per_round: List of average zeta values per round
     """
+    # 如果資料為空，直接返回（避免 crash）
+    if len(all_zeta_per_round) == 0:
+        print("Warning: all_zeta_per_round is empty, skipping zeta plot.")
+        return
+    
+    # 使用實際的資料長度，而不是預期的 num_rounds
+    actual_rounds = len(all_zeta_per_round)
     plt.figure(figsize=(10, 6))
-    plt.plot(range(num_rounds), all_zeta_per_round, marker='o', color='purple')
+    plt.plot(range(actual_rounds), all_zeta_per_round, marker='o', color='purple')
     plt.xlabel('Round')
     plt.ylabel('Average Zeta Value')
     plt.title('Average Zeta Value over Rounds')
@@ -159,8 +173,15 @@ def draw_zeta(num_rounds, all_zeta_per_round):
     plt.savefig('result_plot/zeta_per_round.png')
 
 def draw_cs_mean(num_rounds, cs_mean_record):
+    # 如果資料為空，直接返回（避免 crash）
+    if len(cs_mean_record) == 0:
+        print("Warning: cs_mean_record is empty, skipping cs_mean plot.")
+        return
+    
+    # 使用實際的資料長度
+    actual_rounds = len(cs_mean_record)
     plt.figure(figsize=(10, 6))
-    plt.plot(range(1, num_rounds + 1), cs_mean_record, marker='o')
+    plt.plot(range(1, actual_rounds + 1), cs_mean_record, marker='o')
     plt.xlabel('Round')
     plt.ylabel('Average CS')
     plt.title('Average CS per Round')

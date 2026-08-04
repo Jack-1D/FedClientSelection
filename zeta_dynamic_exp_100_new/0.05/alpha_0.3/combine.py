@@ -171,7 +171,7 @@ for i, data in enumerate(all_data):
     color = colors[i % len(colors)]
     plt.plot(data['epochs'], data['accuracies'], 
              label=data['label'], color=color, linewidth=2)
-    plt.tick_params(axis='both', which='major', labelsize=20)
+    plt.tick_params(axis='both', which='major', labelsize=26)
 
 # 提取資料用於標註功能
 epochs_list = [data['epochs'] for data in all_data]
@@ -251,9 +251,9 @@ def annotate_epoch_accuracy_sorted(epochs_list, accuracies_list, colors, labels,
 
 # plt.title(f'Test Accuracy vs. Communication Round test (Dirichlet α=0.3)')
 # plt.xlabel('Round', fontsize=18, fontweight='bold')
-plt.xlabel('Round', fontsize=22)
-plt.ylabel('Accuracy (%)', fontsize=22)
-plt.legend(loc='lower right', fontsize=20, ncol=1)
+plt.xlabel('Round', fontsize=26)
+plt.ylabel('Accuracy (%)', fontsize=26)
+plt.legend(loc='lower right', fontsize=22, ncol=1)
 plt.grid(True)
 plt.tight_layout()
 plt.savefig('ResNet18_0.3_0.05.png')

@@ -38,6 +38,8 @@ def fedDynamic(args, model_type):
         round_idx_increment=round_idx_increment,
         increment_class_num=args.increment_class_num)
 
+    print(f"round_idx_increment: {round_idx_increment}")
+
     Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
     Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]
@@ -64,6 +66,7 @@ def fedDynamic(args, model_type):
     upper_bound = 1.0
     softmax_temperature = args.softmax_temperature
 
+    np.random.seed(args.random)
     # 聯邦學習訓練
     for round in range(args.num_rounds):
         # Print cumulative data size and cumulative data distribution for each client
@@ -118,27 +121,31 @@ def fedDynamic(args, model_type):
 
         print("Average CS: ", np.mean([Clients[i].cs for i in range(args.num_clients)]))
         
-        if any(Server.signal_list):
-            cs_avg = np.mean([Clients[i].cs for i in range(args.num_clients)])
-            if len(cs_mean_record) != 0:
-                delta_cs = cs_avg - cs_mean_record[-1]
+        # if any(Server.signal_list):
+        #     cs_avg = np.mean([Clients[i].cs for i in range(args.num_clients)])
+        #     if len(cs_mean_record) != 0:
+        #         delta_cs = cs_avg - cs_mean_record[-1]
                 
-                g_t = np.log1p(round + 1)  # 也可以換成 t/rounds 或 sqrt(t)
-                factor = 1 - delta_cs * g_t
+        #         g_t = np.log1p(round + 1)  # 也可以換成 t/rounds 或 sqrt(t)
+        #         factor = 1 - delta_cs * g_t
                 
-                zeta = zeta * factor
-                upper_bound = 1 - round / args.num_rounds  # 上界隨時間下降
-                # upper_bound = 1 / (1 + np.log1p(round + 1))  # 上界隨時間下降
-                print("zeta: ", zeta)
-                print("upper_bound: ", upper_bound)
-                zeta = max(min(zeta, upper_bound), 0.0)  # 確保 zeta 在 [0, upper_bound] 範圍內
+        #         zeta = zeta * factor
+        #         upper_bound = 1 - round / args.num_rounds  # 上界隨時間下降
+        #         # upper_bound = 1 / (1 + np.log1p(round + 1))  # 上界隨時間下降
+        #         print("zeta: ", zeta)
+        #         print("upper_bound: ", upper_bound)
+        #         zeta = max(min(zeta, upper_bound), 0.0)  # 確保 zeta 在 [0, upper_bound] 範圍內
             
-            Server.request_to_recompute_probabilities(Clients)
-            probabilities = Server.recompute_probabilities(zeta, softmax_temperature, list_of_dataLoaders, round)
-            Server.do_snapshot(Clients)
-            print(f"Updated probabilities: {probabilities}")
-            last_signal = round
-            print(f"Round {round+1}: zeta {zeta}")
+        #     Server.request_to_recompute_probabilities(Clients)
+        #     probabilities = Server.recompute_probabilities(zeta, softmax_temperature, list_of_dataLoaders, round)
+        #     Server.do_snapshot(Clients)
+        #     print(f"Updated probabilities: {probabilities}")
+        #     last_signal = round
+        #     print(f"Round {round+1}: zeta {zeta}")
+        zeta = 0
+        Server.request_to_recompute_probabilities(Clients)
+        probabilities = Server.recompute_probabilities(zeta, softmax_temperature, list_of_dataLoaders, round)
+        Server.do_snapshot(Clients)
         all_zeta_per_round.append(zeta)
         cs_mean_record.append(np.mean([Clients[i].cs for i in range(args.num_clients)]))
 

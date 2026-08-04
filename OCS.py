@@ -38,6 +38,8 @@ def OCS(args, model_type):
         round_idx_increment=round_idx_increment,
         increment_class_num=args.increment_class_num)
 
+    print(f"round_idx_increment: {round_idx_increment}")
+
     Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
     Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]
@@ -127,7 +129,7 @@ def OCS(args, model_type):
         sorted_indices = np.argsort(weighted_norms)
         sorted_norms = weighted_norms[sorted_indices]
 
-        m = min(participate_client_num, 3)  # 限制最多選擇 3 個 client
+        m = min(participate_client_num, 6)  # 限制最多選擇 6 個 client
         l = 0
         for l in range(n):
             if sorted_norms[l] == 0:
@@ -152,8 +154,8 @@ def OCS(args, model_type):
 
         # Bernoulli sampling：決定哪些 client 被選中
         selected_clients = np.array([i for i in range(n) if np.random.rand() < p[i]])
-        if len(selected_clients) > 3:  # 如果選中的 client 超過 3 個，隨機選擇 3 個
-            selected_clients = np.random.choice(selected_clients, 3, replace=False)
+        if len(selected_clients) > 6:  # 如果選中的 client 超過 6 個，隨機選擇 6 個
+            selected_clients = np.random.choice(selected_clients, 6, replace=False)
         print(f"Selected clients (OCS) for round {round + 1}: {selected_clients}")
 
         # 記錄每一輪選到的client

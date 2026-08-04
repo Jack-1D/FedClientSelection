@@ -38,6 +38,8 @@ def PoC(args, model_type):
         round_idx_increment=round_idx_increment,
         increment_class_num=args.increment_class_num)
 
+    print(f"round_idx_increment: {round_idx_increment}")
+
     Server = FLServer(copy.deepcopy(model_type), list_of_testloaders, total_class, args.num_clients, args.num_rounds, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
     list_of_dataLoaders = list(map(list, zip(*list_of_dataLoaders)))    # [client][round]
     Clients = [FLClient(copy.deepcopy(model_type), list_of_dataLoaders[i], total_class, args.num_clients, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay) for i in range(args.num_clients)]

@@ -38,6 +38,7 @@ def args_parser():
     parser.add_argument("--resume_from_round", type=int, default=0, help="Resume training from specific round (0 means start from beginning)")
     parser.add_argument("--checkpoint_path", type=str, default="", help="Path to checkpoint file to resume from")
     parser.add_argument("--log_file", type=str, default="Log10.log", help="Log file name")
+    parser.add_argument("--random", type=int, default=42, help="np random")
     args = parser.parse_args()
     args.data_size_alphas = ast.literal_eval(args.data_size_alphas)
     return args
